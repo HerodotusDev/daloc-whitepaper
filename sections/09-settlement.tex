@@ -1,12 +1,13 @@
 \section{Settlement and Market Definitions}
+\label{sec:settlement}
 
 \subsection{Settlement Programs}
 
 The on-chain contracts are settlement executors: they verify Merkle proofs and execute committed transfers and hook chains, but contain no market-specific logic. All behavior---interest computation, liquidation detection, oracle selection, collateral policy---lives in configurable zero-knowledge programs whose outputs the contracts verify.
 
-Each market specifies four program hashes at creation: interest accrual, liquidation execution, and two state transitions (one per chain-side contract---collateral manager and debt issuer). Programs take loan state and on-chain data as inputs---including storage reads via cross-chain proofs where needed---and produce Merkle trees of authorized actions or individual fact attestations as outputs. Settlement programs split by economic cadence. \textbf{Matching} is one-time per accepted loan: a single epoch transition commits transfers, debt issuance, and CDP authorization. \textbf{Interest accrual} is periodic: independent facts per debt per time window, invoked on a schedule without advancing global epoch counters. \textbf{Liquidation} is event-triggered: health breaches produce liquidation leaves and facts, processed atomically. \textbf{Close} is a terminal on-chain transition after repayments and accrual catch up, enforced by on-chain accounting invariants.
+Each market specifies four program hashes at creation: interest accrual, liquidation execution, and two state transitions (one per chain-side contract---collateral manager and debt issuer). Programs take loan state and on-chain data as inputs---including storage reads via cross-chain proofs where needed---and produce Merkle trees of authorized actions or individual fact attestations as outputs. Settlement programs split by economic cadence. \textbf{Matching} is one-time per accepted loan: a single epoch transition commits transfers, debt issuance, and CDP authorization; the matching program evaluates criteria compatibility between entries as part of the match validity check---failing criteria produces a non-match, and the entries are never paired. \textbf{Interest accrual} is periodic: independent facts per debt per time window, invoked on a schedule without advancing global epoch counters. \textbf{Liquidation} is event-triggered: health breaches produce liquidation leaves and facts, processed atomically. \textbf{Close} is a terminal on-chain transition after repayments and accrual catch up, enforced by on-chain accounting invariants. \textbf{Compliance} is periodic per vault epoch: the Harvest Vault's mandate-compliance program produces a fact attesting operator behavior, verified through the same facts-registry interface as state-transition and interest facts (Equation~\ref{eq:compliancefact}).
 
-A single verification interface connects all programs to on-chain acceptance. The \emph{facts registry} accepts a fact hash and returns whether it is valid. Two fact types carry all state:
+A single verification interface connects all programs to on-chain acceptance. The \emph{facts registry} accepts a fact hash and returns whether it is valid. Two fact types carry all market state:
 
 A \textbf{state-transition fact} authorizes an epoch advance:
 \begin{equation}
@@ -20,7 +21,7 @@ where $\mathit{epoch}_{\mathit{prev}}$ and $\mathit{epoch}_{\mathit{next}}$ each
 \end{equation}
 where $\Delta I$ is the interest amount over the accrual window $[t_{\mathit{from}}, t_{\mathit{to}})$. The on-chain contract reconstructs the expected fact hash from its immutable state, checks the registry, and applies the attested values only if the fact is valid. Cryptographic soundness rests on proof validity upstream of registration.
 
-Each epoch advance processes three concurrent generations of loan activity in a single state transition: finalizing loans whose collateral and principal settled two epochs prior, settling principal for loans matched one epoch prior, and matching newly submitted intents. This pipelining allows continuous throughput without blocking on individual loan finalization. When the solver is the platform's own vault operator, all three steps compress into a single epoch via an atomic multicall.
+Each epoch advance processes three concurrent generations of loan activity in a single state transition: finalizing loans whose collateral and principal settled two epochs prior, settling principal for loans matched one epoch prior, and matching newly submitted intents. This pipelining allows continuous throughput without blocking on individual loan finalization. When the solver is the vault operator, all three steps compress into a single epoch via an atomic multicall.
 
 \subsection{Collateral Manager and Debt Issuer}
 
