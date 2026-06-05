@@ -2,9 +2,9 @@
 
 \subsection{Debt Tokens}
 
-Each funded loan issues a transferable ERC-20 whose face value is one unit of the principal asset per token. The token is the lender's economic position. The claim value per token is:
+Each funded loan issues a transferable ERC-20 whose face value is one unit of the principal asset per token. The token is the lender's economic position. The claim value per token---the amount redeemable at maturity---is:
 \begin{equation}
-  \texttt{pricePerDebtToken} = 1 + \texttt{cumulativeInterestPerToken}
+  \texttt{claimValuePerToken} = 1 + \texttt{cumulativeInterestPerToken}
   \label{eq:debtprice}
 \end{equation}
 rising as interest is accrued and verified. Interest accrues linearly at the loan's fixed rate:
@@ -18,12 +18,26 @@ The contract maintains a strict accounting identity: every unit of principal is 
 
 Two rules protect solvency and fee collection. \emph{Redemption lock:} after new cash enters from repayment or liquidation, redemptions are blocked until interest for that period is accrued, so lenders cannot exit at the pre-fee index. \emph{Close:} the loan can be marked closed only when accrual is current and the principal reserve covers all outstanding tokens.
 
+Debt tokens originating from markets with criteria-based restrictions can carry transfer-time criteria---for example, ``transferable only to holders with KYC tier~$\geq$~2''---enforced by the debt issuer at the hub-routed transfer step. This ensures restricted debt tokens remain restricted after origination, regardless of secondary-market activity.
+
 \subsection{Vault Shares}
 
-LPs hold vault shares whose value tracks the portfolio's realized spread. Shares are standard ERC-20. The share price reflects the vault's net asset value per outstanding share, increasing when hedging surpluses are released and decreasing only when buffer exhaustion or adverse liquidations reduce the vault's USDC balance. While loans are live, the vault is the creditor of record on each loan's debt token: the vault's economic return arrives when repayments unlock redemption and debt tokens are converted to USDC at the current claim value (Equation~\ref{eq:debtprice}). Exits follow the epoch-based withdrawal described in Section~\ref{subsec:withdrawal}.
+LPs hold vault shares whose value tracks the portfolio's realized spread. Shares are standard ERC-20. The share price reflects the vault's net asset value per outstanding share, increasing when loan interest is collected and hedging surpluses are released, and decreasing only when borrower defaults or adverse liquidations reduce the vault's balance. While loans are live, the vault is the creditor of record on each loan's debt token: the vault's economic return arrives when repayments unlock redemption and debt tokens are converted to USDC at the current claim value (Equation~\ref{eq:debtprice}). Exits follow the epoch-based withdrawal described in Section~\ref{subsec:withdrawal}.
 
 \subsection{Secondary Markets}
 
-Debt tokens are standard ERC-20, so creditors can sell loan exposure on any secondary venue without protocol modification. A buyer acquires the right to outstanding principal and all future interest at the current claim value. Because the interest accumulator is global to each token contract, buyers step into the same index without a protocol assignment step---enabling OTC or on-chain secondary liquidity.
+A fixed-rate, fixed-term lender who needs liquidity before maturity cannot ask the borrower to repay---the secondary market is the exit. Debt tokens are standard ERC-20, so creditors can sell loan exposure on any secondary venue without protocol modification. But the secondary market serves purposes beyond mere transferability.
+
+\textbf{Credit-risk price discovery.} Two loans with identical face value can trade at different prices because the market disagrees on default probability. The price difference is the on-chain analog of a credit spread---a signal that pool-based lending cannot produce because every position in the pool earns the same rate.
+
+\textbf{Yield curve construction.} Debt tokens of different tenors against the same collateral, trading simultaneously, produce an observable term structure---the precondition for duration-matched strategies, hedging products, and structured credit.
+
+The claim value (Equation~\ref{eq:debtprice}) is what the holder receives on redemption at maturity. The market price is what a buyer pays today. These differ whenever the buyer's required yield diverges from the loan's coupon---because market rates moved since origination, because perceived credit risk changed, or because of an illiquidity discount. When the market requires a higher yield than the coupon, the token trades below claim value; when conditions have improved since origination, it trades above. The spread between market yield and the loan's original coupon is the observable credit signal: non-zero precisely when the market disagrees with the original underwriting.
 
 Each loan produces its own token, in contrast with protocols that settle into fungible units across all positions in a market~\cite{midnight2025}. The per-loan design enables independently tradeable positions with distinct interest accumulators and reserve pairs---granular risk transfer that pool-based or market-fungible designs cannot offer without off-chain registry layers.
+
+\subsection{Liquidity Bootstrap}
+
+The secondary market's depth is not assumed---it is bootstrapped. The platform operates a protocol-funded auto-bidder in the early phase, posting standing bids at a spread above the model-implied fair value for each live debt token. Bids are funded from a designated allocation within the Harvest Vault, subject to an explicit cap as a fraction of vault NAV.
+
+The auto-bidder is transparent: its bid depth and fill rate are published per epoch. It functions as a market-maker of last resort, not as a simulation of organic demand. A removal milestone is defined---third-party fill rate exceeding a threshold for consecutive epochs---ensuring the protocol does not perpetually subsidize liquidity that the market should provide on its own. As secondary volume grows and external market-makers enter, the auto-bidder's allocation shrinks and eventually reaches zero.
