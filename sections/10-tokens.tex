@@ -1,0 +1,34 @@
+\section{Position Tokens}
+\label{sec:tokens}
+
+Each funded loan produces a tokenized position that represents the lender's claim, carries accrual, and enforces solvency rules as a transferable ERC-20.
+
+\subsection{Debt Tokens}
+
+Each funded loan issues a transferable ERC-20 whose face value is one unit of the principal asset per token. The token is the lender's economic position. The claim value per token $v$ (the amount redeemable at maturity) is
+\begin{equation}
+  v = 1 + I_{\mathrm{cum}},
+  \label{eq:debtprice}
+\end{equation}
+where $I_{\mathrm{cum}}$ is the cumulative interest accrued per token, rising as interest is verified. Interest accrues linearly (simple interest, not compound), so the borrower's total obligation at maturity for principal~$P$ over term~$T$ is
+\begin{equation}
+  D = P\!\left(1 + r\,\frac{T}{T_{\mathrm{year}}}\right),
+  \label{eq:totaldebt}
+\end{equation}
+and the per-period increment used by the on-chain accrual program is
+\begin{equation}
+  \Delta I = P\, r\, \frac{\Delta t}{T_{\mathrm{year}}},
+  \label{eq:interest}
+\end{equation}
+where $P$ is the outstanding principal in token units, $r$ the annualized rate, $\Delta t$ the accrual period in seconds, and $T_{\mathrm{year}} = 365.25 \times 86{,}400$. Linear accrual is a deliberate choice: the borrower's obligation is fully determined at origination, with no path-dependent compounding. Each accrual requires a valid interest fact verified through the facts registry (Section~\ref{sec:settlement}).
+
+Repayment proceeds enter a principal reserve. A subsequent accrual step, backed by a proof tied to the market's rate program, splits the interest portion into a protocol fee and an interest reserve. Holders redeem by burning tokens and receiving principal plus their share of the interest index.
+
+A strict accounting identity holds at all times, ensuring no principal, interest, or fee is created or destroyed:
+\begin{equation}
+  R_{\mathrm{principal}} + R_{\mathrm{interest}} + F_{\mathrm{protocol}} = B_{\mathrm{token}},
+  \label{eq:accounting}
+\end{equation}
+where $R_{\mathrm{principal}}$ is the redeemable principal reserve, $R_{\mathrm{interest}}$ the interest reserve, $F_{\mathrm{protocol}}$ the accrued protocol fees, and $B_{\mathrm{token}}$ the contract's token balance. Redemptions are blocked until interest for the latest period is accrued, preventing exits at a stale index. A loan can be marked closed only when accrual is current and the principal reserve covers all outstanding tokens.
+
+Debt tokens from criteria-restricted markets carry transfer-time criteria (e.g.\ ``KYC tier~$\geq$~2'') enforced at the hub-routed transfer step, ensuring restrictions persist after origination. When the Harvest Vault is creditor, vault shares (Section~\ref{sec:lp}) reflect the aggregate claim value across all held debt tokens. Debt tokens are ERC-20 with transfer routing through the hub; this hub routing enables criteria enforcement while preserving standard ERC-20 composability for unrestricted tokens.

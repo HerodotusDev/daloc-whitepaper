@@ -1,0 +1,29 @@
+\section{Governance and Trust Assumptions}
+\label{sec:governance}
+
+The protocol's trust surface is deliberately narrow. Market parameters are fixed at creation and identified by their hash; every epoch advance requires a valid zero-knowledge proof registered in the facts registry (Section~\ref{sec:settlement}). Trust concentrates in the hub contract, which governs all capital flows, and in the liveness of off-chain infrastructure.
+
+Beyond these trust surfaces, the protocol minimizes dependence on any single party. Markets are independent state machines (Section~\ref{sec:architecture}) that advance their own epochs without shared global state; deployment is permissionless, and so is participation as a solver, liquidator, or epoch executor. A forced-inclusion path through the settlement layer ensures that no operator can permanently censor intents or block exits.
+
+Safety is structural: the system invariants of Section~\ref{sec:settlement} (token conservation, epoch monotonicity, position isolation) hold across all reachable states, and no state transition can occur without a valid zero-knowledge proof. Mandate compliance is enforced through fee-gating rather than execution-blocking (Section~\ref{sec:lp}). Liveness depends on each market's operator and on the chains, bridges, provers, and external venues used by that market; a configurable timeout bounds how long a market can stall before a fallback operator may step in.
+
+The architecture targets custody recoverability without reliance on the original off-chain operator. Users should be able to submit cancellations, forced-inclusion requests, withdrawals, or recovery actions directly to the relevant on-chain contracts; for markets deployed on L2s, this may rely on that L2's L1 inbox, escape hatch, or forced-transaction mechanism. This does not mean that every economic action is immediately available from L1: liquidation, oracle updates, bridge movement, and external-venue unwinds still depend on the relevant chains and infrastructure being live. Each market defines its own data-availability and recovery policy, and the architecture admits progressive trust reduction as markets mature.
+
+\subsection{Protocol Administration}
+
+A multisig with timelock governs protocol contracts, which are upgradeable. Upgradeability permits response to critical vulnerabilities at the cost of trust in the multisig. Because core contracts control capital flows and settlement execution, an upgrade can alter routing and pause behavior across every market simultaneously. Pause and bridge-adapter whitelisting are also multisig actions; cross-chain routes are permissioned even though markets are not.
+
+\subsection{Liveness Dependencies}
+
+Settlement correctness is enforced by zero-knowledge proofs (Section~\ref{sec:settlement}), but liveness is not: if a market's off-chain infrastructure halts, no new epochs advance for that market. Existing positions remain safe (collateral stays locked, debt is unchanged, intent cancellation remains available), but undercollateralized positions go undetected until epochs resume.
+
+Each market defines a liveness timeout. If no epoch advances within that window, users may withdraw deposited capital, and the market may permit a fallback operator to resume epoch production.
+
+LTV limits, rates, and buffer sizes are produced off-chain by the risk engine. The serving computation is cryptographically verified via zero-knowledge proof (Section~\ref{sec:risk}), ensuring quotes derive correctly from the declared kernel and risk policy. The mandate (Section~\ref{sec:lp}) imposes outer bounds (rate floors, LTV ceilings, concentration caps) enforced through fee-gating. Neither mechanism validates the underlying model calibration or Monte Carlo assumptions between those bounds.
+
+Cross-chain movement depends on the selected bridge infrastructure
+(Section~\ref{sec:crosschain}); the protocol inherits the bridge's liveness
+and censorship properties. Authorization correctness is cryptographic
+(ZK storage proofs over actual chain state), but proof-generation availability
+depends on the data provider, and bridge execution depends on the source
+and destination chains being live.

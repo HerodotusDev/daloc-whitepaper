@@ -1,0 +1,35 @@
+\section{Cross-Chain Exposure}
+\label{sec:crosschain}
+
+Cross-chain operation is the default; same-chain loans are a special case. Two concerns arise at different layers.
+
+\textbf{Authorization} (protocol-level): proving that collateral was pledged on the collateral chain so the principal chain's contracts can act on it. \daloc{} uses ZK storage proofs via the Herodotus Data Processor (HDP)~\cite{hdp}, combining storage proofs with MMR-backed chain history into a single verifiable claim.
+
+\textbf{Token movement} (solver-level): physically moving the borrowed asset to its destination. Solvers choose the bridge path from the market's admissible set; bridge hooks compose movement into the origination hook chain.
+
+\subsection{Authorization Flow}
+
+Consider a borrower who pledges WETH on Ethereum and requests USDC on Arbitrum. The collateral-chain issuer records the pledge; a settlement program reads the CDP's storage slot from Ethereum's state root via HDP (a Merkle inclusion proof against the state trie, attested by an MMR over canonical block headers), producing a verifiable claim that the collateral is locked. On Arbitrum, the debt issuer validates this claim through the facts registry and issues the debt token.
+
+Each chain's issuer advances its epoch independently; coordination relies on shared market identifiers and deterministic addressing, not real-time cross-chain messaging. Bridge latency affects capital delivery but not settlement correctness; a delayed bridge stalls execution, never produces an invalid state.
+
+\subsection{Deterministic Addressing}
+
+Identical hub addresses on every supported chain, combined with deterministic \texttt{CREATE2} loan contracts, allow collateral on chain~A and debt on chain~B to reference the same loan identifier. Adding a new destination chain requires only a bridge adapter whitelisted on the hub.
+
+\subsection{Hyperliquid Margin Agent}
+
+For Prime Trade, the margin pipeline (Section~\ref{sec:lifecycle}) routes borrowed USDC to a per-loan \emph{margin agent} on HyperEVM~\cite{hyperliquid} at a \texttt{CREATE2} address computed at quote time. Capital enters HyperCore as margin, never the borrower's wallet. Permitted actions are restricted to perpetual trading; withdrawals, spot transfers, and external lending are blocked.
+
+On close or liquidation, the margin agent recalls capital from HyperCore and bridges it back to Ethereum. Collateral never crosses to HyperEVM; only USDC round-trips. Figure~\ref{fig:primetrade} illustrates the full origination, active trading, and close cycle.
+
+\subsection{Effective Leverage}
+
+For Prime Trade, the borrowing LTV combined with venue leverage creates a multiplicative effect. For collateral worth~$C$ deposited at LTV~$\lambda$ with venue leverage~$\ell$, the notional controlled is
+\begin{equation}
+  N = C \cdot \lambda \cdot \ell,
+  \label{eq:efflev}
+\end{equation}
+and the effective leverage relative to the collateral is $\lambda_{\mathrm{eff}} = N / C = \lambda \cdot \ell$.
+
+At $\lambda = 62.5\%$ LTV with $\ell = 5\times$ venue leverage, $\lambda_{\mathrm{eff}} = \lambda \cdot \ell \approx 3.1\times$; this yields substantial notional controlled without selling the underlying. Collateral remains on Ethereum throughout.

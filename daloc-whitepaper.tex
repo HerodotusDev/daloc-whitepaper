@@ -1,0 +1,74 @@
+\documentclass[11pt,a4paper]{article}
+\input{preamble}
+
+\begin{document}
+
+% --- Title page ---
+\hypersetup{pageanchor=false}
+\begin{titlepage}
+  \centering
+  \vspace*{4cm}
+
+  {\Huge\bfseries \daloc\par}
+  \vspace{0.8cm}
+  {\Large A Cross-Chain Prime Brokerage Protocol\\for Collateralized Credit\par}
+
+  \vspace{2.5cm}
+
+  \noindent
+  \begin{tabular}[t]{@{}c@{\hspace{1.5em}}c@{\hspace{1.5em}}c@{}}
+    {\large Bartosz Nowak} & {\large Marcello Bardus} & {\large Jamil Bouhdada} \\[0.4em]
+    {\normalsize \href{mailto:bartosz@herodotus.dev}{bartosz@herodotus.dev}} &
+    {\normalsize \href{mailto:marcello@herodotus.dev}{marcello@herodotus.dev}} &
+    {\normalsize \href{mailto:jamil@herodotus.dev}{jamil@herodotus.dev}}
+  \end{tabular}
+
+  \vspace{1.8cm}
+  {\large June 2026\par}
+
+  \vfill
+\end{titlepage}
+\hypersetup{pageanchor=true}
+
+% --- Disclaimer ---
+\vspace*{0.5cm}
+\noindent
+\fbox{\parbox{\dimexpr\textwidth-2\fboxsep-2\fboxrule}{%
+    \small\sffamily
+    \textbf{Important Notice.}
+    This document describes the technical architecture of a protocol under development.
+    It does not constitute an offer, solicitation, or recommendation to purchase any token,
+    security, financial instrument, or investment product. The system described may never be
+    deployed, or may differ materially from this description. Nothing herein constitutes
+    financial, investment, or legal advice. References to third-party protocols are for
+    technical context only and do not imply endorsement or partnership. Readers should consult
+    independent professional advisors before taking any action based on this document.
+}}
+\vspace{1cm}
+
+% --- Body ---
+\input{sections/00-abstract}
+
+\newpage
+\setcounter{tocdepth}{2}
+\tableofcontents
+\newpage
+
+\input{sections/01-introduction}
+\input{sections/02-products}
+\input{sections/03-architecture}
+\input{sections/04-capital}
+\input{sections/05-lifecycle}
+\input{sections/06-liquidity-providers}
+\input{sections/07-risk}
+\input{sections/08-crosschain}
+\input{sections/09-settlement}
+\input{sections/10-tokens}
+\input{sections/12-governance}
+\input{sections/11-discussion}
+
+% --- References ---
+\clearpage
+\bibliography{references}
+
+\end{document}
