@@ -8,6 +8,7 @@
 # 17 - Mismatched brackets — false positive from multi-file \input processing.
 # 24 - Delete this space to maintain correct pagereferences.
 # 36 - Vertical rules in tables.
+# 38 - Punctuation in front of quotes — standard English style (period inside closing quotes).
 # 44 - User Regex.
 CmdLine {
   -n1
@@ -18,5 +19,6 @@ CmdLine {
   -n17
   -n24
   -n36
+  -n38
   -n44
 }
