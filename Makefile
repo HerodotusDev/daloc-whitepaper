@@ -5,7 +5,7 @@ FLAGS  = -interaction=nonstopmode -halt-on-error
 
 SRCS   = $(NAME).tex preamble.tex $(wildcard sections/*.tex)
 
-.PHONY: all fmt lint check clean
+.PHONY: all build fmt lint check clean
 
 all: $(NAME).pdf
 
@@ -14,6 +14,8 @@ $(NAME).pdf: $(SRCS) references.bib
 	$(BIB) $(NAME)
 	$(TEX) $(FLAGS) $(NAME)
 	$(TEX) $(FLAGS) $(NAME)
+
+build: clean all
 
 fmt:
 	tex-fmt --nowrap $(SRCS)
