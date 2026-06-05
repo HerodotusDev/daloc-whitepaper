@@ -15,7 +15,7 @@ A loan can lock collateral on chain~A while the debt token and lender claims liv
 
 \subsection{Hyperliquid Pipeline}
 
-When a borrower accepts a margin-path quote, the Ethereum leg settles atomically through a hook chain: epoch roots are posted, the per-loan CDP is deployed, and hooks execute---deposit collateral, supply to the external venue, borrow USDC. Instead of transferring USDC to the borrower, a bridge hook burns the USDC via CCTP, with the destination set to a per-loan \emph{margin agent} on HyperEVM whose address was computed at quote time via \texttt{CREATE2}.
+When a borrower accepts a margin-path quote, the Ethereum leg settles atomically through a hook chain: epoch roots are posted, the per-loan CDP is deployed, and hooks execute---deposit collateral, source USDC (either directly from the vault or by supplying collateral to an external venue and borrowing), and bridge. Instead of transferring USDC to the borrower, a bridge hook burns the USDC via CCTP, with the destination set to a per-loan \emph{margin agent} on HyperEVM whose address was computed at quote time via \texttt{CREATE2}.
 
 CCTP attesters and relayers mint USDC to the margin agent on HyperEVM. The margin agent deposits the USDC into HyperCore as margin in its own per-position account---the capital never enters the borrower's personal wallet. The borrower selects perpetual positions through the platform's interface; the margin agent constrains executable actions to perpetual trading only, blocking withdrawals, spot transfers, and external lending.
 
