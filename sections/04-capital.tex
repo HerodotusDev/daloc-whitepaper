@@ -1,0 +1,55 @@
+\section{Capital Management}
+
+\subsection{Liquidity Sourcing}
+
+\daloc{} does not fund loans from vault principal. Each loan opens an isolated CDP that borrows from an external lending protocol on the borrower's behalf: the CDP deposits the pledged collateral on the external venue, borrows the requested principal in USDC, and routes it to the borrower---all composed as an atomic hook chain within a single transaction. The pledged collateral does double duty---it simultaneously secures the \daloc{} loan and serves as collateral on the external venue, generating utilization-based yield for the underlying pool while backing the borrower's fixed-rate obligation. The platform's own capital is reserved exclusively for underwriting the hedging instruments---rate buffers and option buffers---that convert variable-rate external funding to the fixed terms the borrower receives.
+
+This design solves the cold-start problem that every new lending protocol faces. The conventional answer is liquidity mining---paying incentives until enough capital accumulates. \daloc{} eliminates that dependency entirely: the platform consumes the liquidity that already exists on established lending protocols---Aave, Morpho, Spark, and others---ensuring that all capital is productively deployed from the first loan originated. These external lending venues are not \daloc{}'s competitors---they are its suppliers. The platform sits above that layer, aggregating their liquidity against borrower requests without competing for deposits.
+
+The capital required from the platform's own vault is a small fraction of the loan value---typically 3--7\% of principal, depending on collateral type and term. This fraction covers the hedging instruments that absorb the mismatch between the fixed rate charged to the borrower and the variable rate paid to the external venue. The result is extreme capital leverage: \$1M of vault capital can support \$15--30M of outstanding loans, generating spread-based revenue from every position without requiring the platform to fund the loan itself.
+
+\subsection{Capital Efficiency}
+
+The vault commits capital to two hedging instruments, both sized automatically by the risk engine at quote time.
+
+A \textbf{rate buffer} covers the gap between the fixed rate charged to the borrower and the variable rate paid to the external venue over the term. The buffer is sized from the tail of simulated variable-rate paths, ensuring the platform can absorb rate mismatch across the loan's life.
+
+For collateral not directly listed on the external venue, the platform adds an \textbf{option buffer}. The collateral is swapped to a venue-listed intermediate at origination (e.g.\ LDO $\to$ WETH); at close, the reverse swap must execute at prevailing market conditions. The option buffer covers the tail of the round-trip conversion cost, sized from simulated execution against actual on-chain pool state and depth.
+
+Consider a \$500,000 loan backed by WETH collateral at a 70\% credit multiplier. The external venue supplies the \$350,000 principal. The vault reserves \$17,500 as a rate buffer (5\% of principal)---approximately \textbf{20:1 capital leverage}. For swap-path collateral, an additional option buffer of approximately \$15,000 hedges the round-trip conversion, reducing effective leverage to approximately \textbf{11:1}. In both cases, unused hedging reserves flow back to the vault at close as LP yield.
+
+\begin{figure}[ht]
+  \centering
+  \resizebox{\textwidth}{!}{%
+    \begin{tikzpicture}[
+        box/.style={draw, rounded corners=3pt, minimum height=1cm, minimum width=2.4cm,
+        align=center, font=\small\sffamily},
+        arr/.style={-{Stealth[length=6pt]}, thick},
+        lab/.style={font=\scriptsize\sffamily, fill=white, inner sep=1pt},
+        node distance=1cm and 2cm
+      ]
+      \node[box] (V)  {Vault};
+      \node[box, right=3cm of V]  (CM) {CDP};
+      \node[box, right=3cm of CM] (AV) {External Venue};
+
+      \draw[arr, dashed] (V)  -- node[lab,above]{\$17.5k buffer (escrowed)} (CM);
+      \draw[arr] (CM) -- node[lab,above]{\$500k collateral} (AV);
+      \draw[arr] (AV.south) -- ++(0,-0.5) -| node[lab,below,pos=0.75]{\$350k USDC principal} (CM.south);
+
+      \node[font=\scriptsize\sffamily, below=1.5cm of V, text width=3cm, align=center]
+      {5\% of principal\\= 20:1 leverage};
+      \node[font=\scriptsize\sffamily, below=1.5cm of AV, text width=3cm, align=center]
+      {70\% credit multiplier\\principal from pool};
+    \end{tikzpicture}%
+  }
+  \caption{Capital efficiency---direct lending path. The vault commits \$17,500 of hedging capital; the external venue supplies \$350,000 of principal against borrower-pledged collateral. Vault capital serves as insurance, not as the lending book.}
+  \label{fig:capital}
+\end{figure}
+
+\subsection{Rate Transform}
+
+The borrower pays a fixed rate committed at origination; the platform's funding leg is the external venue's utilization-driven variable rate. The \textbf{rate buffer} is the dedicated tranche that absorbs the mismatch. At close, realized variable cost is the CDP's remaining variable debt. If variable cost stayed below the fixed charge---the common case---the buffer surplus stays in the vault as LP yield. If variable cost exceeded the reservation, the buffer is consumed and any residual shortfall reduces vault NAV.
+
+\subsection{Slippage Hedge}
+
+Non-venue-listed collateral is swapped to an intermediate asset at origination; the reverse swap at close faces uncertain execution cost. The \textbf{option buffer} escrows the maximum round-trip slippage liability, sized from the tail of simulated slippage paths. On roughly 95\% of loans the hedge expires unused and the escrow becomes LP yield; on the remainder, the buffer pays the realized slippage up to its maximum.

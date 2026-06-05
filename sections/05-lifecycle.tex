@@ -1,0 +1,51 @@
+\section{Loan Lifecycle}
+
+\subsection{Origination}
+
+Origination follows a request-for-quote flow routed through the unified order book. A borrower posts a request specifying the collateral chain and asset, the principal chain and asset, the amount, and the term. The request enters the order book as a standard entry. Solvers respond with quotes---structurally identical entries on the other side of the book---specifying rate, execution path, and hook chain. The risk engine evaluates the request against live market conditions and produces a credit multiplier, a fixed rate, and barrier thresholds. Before on-chain execution, both parties cryptographically commit to terms, so neither party can be surprised by the settlement outcome. The accepted quote and its hook chain are committed into an epoch's settlement tree and executed atomically.
+
+The initial release supports four sourcing paths, each assembled as a hook chain:
+
+\textbf{Direct path.} For venue-listed collateral (e.g.\ WETH): the hook chain reserves the rate buffer, supplies collateral to the external venue, borrows USDC principal, and transfers it to the borrower---all within a single atomic transaction. Concretely: a borrower deposits 0.2~ETH into the CDP; the hooks supply the ETH to the external venue, borrow 200~USDC, and deliver it to the borrower; a rate buffer of 10~USDC is escrowed in the vault.
+
+\textbf{Swap path.} For long-tail collateral (e.g.\ LDO, UNI): a swap hook converts collateral to a venue-listed intermediate, then the chain proceeds as direct with both rate buffer and option buffer reserved. Extends fixed-rate access beyond the external venue's asset list at the cost of slippage escrow.
+
+\textbf{Margin path.} For venue-listed collateral with principal bridged to Hyperliquid: same as direct, but a bridge hook burns the principal via Circle's Cross-Chain Transfer Protocol (CCTP) to a per-loan margin agent on HyperEVM instead of transferring it to the borrower on Ethereum (Section~\ref{sec:crosschain}).
+
+\textbf{Margin-swap path.} Combines the swap-path collateral conversion with the margin-path delivery: swap hook, option buffer, borrow hooks, then CCTP bridge hook.
+
+\begin{figure}[ht]
+  \centering
+  \resizebox{\textwidth}{!}{%
+    \begin{tikzpicture}[
+        box/.style={draw, rounded corners=3pt, minimum height=1.2cm, minimum width=2.8cm,
+        align=center, font=\small\sffamily},
+        arr/.style={-{Stealth[length=6pt]}, thick},
+        lab/.style={font=\scriptsize\sffamily, fill=white, inner sep=1pt},
+        node distance=1.2cm and 2.2cm
+      ]
+      \node[box] (B)  {Borrower};
+      \node[box, right=of B]  (CDP) {CDP};
+      \node[box, right=of CDP] (AV)  {External Venue};
+      \node[box, right=of AV]  (V)   {Vault};
+
+      \draw[arr] (B)   -- node[lab,above]{WETH} (CDP);
+      \draw[arr] (CDP) -- node[lab,above]{supply} (AV);
+      \draw[arr] (AV)  -- node[lab,below]{USDC} (CDP);
+      \draw[arr] (CDP) -- node[lab,below]{USDC} (B);
+      \draw[arr] (CDP.south) -- ++(0,-0.6) -| node[lab,below,pos=0.25]{debt tokens (minted)} (V.south);
+      \node[font=\scriptsize\sffamily, below=1.2cm of V, text width=3cm, align=center]
+      {rate buffer\\escrowed in vault};
+    \end{tikzpicture}%
+  }
+  \caption{Origination---direct lending path. Borrower pledges WETH; the hook chain supplies it to the external venue, borrows USDC, and delivers it. Debt tokens are minted to the vault as creditor; the rate buffer is escrowed in the vault.}
+  \label{fig:origination}
+\end{figure}
+
+\subsection{Close and Liquidation}
+
+Repayment follows a two-phase process. First, the borrower deposits USDC into the debt token contract, increasing its redeemable reserve. The contract locks redemptions until the next interest accrual is verified---a safety property that prevents creditors from redeeming at a stale price before the protocol fee on outstanding interest is recorded. Second, the vault redeems its debt tokens, receiving USDC proportional to the current claim value (principal plus accrued interest), and routes the USDC to the CDP for variable-rate debt repayment on the external venue.
+
+On voluntary close, the platform unwinds the external position atomically via a close hook chain: releases hedging reserves to the CDP, repays the remaining variable debt, withdraws the collateral, and returns it to the borrower. For swap-path loans, the chain includes a reverse swap from the intermediate asset back to the original collateral. Any hedging surplus---the difference between reserved buffers and realized costs---stays in the vault as LP yield.
+
+Liquidation spans two epochs. In the first, a proof attesting the liquidatable state is committed as a leaf in the epoch's liquidation root---detection is identity-agnostic, requiring only the mathematical fact that barriers have been breached. In the second, the liquidator identifies itself on-chain, repays the outstanding debt via the debt token contract, and seizes collateral from the CDP at a risk-engine-determined price. Separating detection from seizure ensures that collateral moves only after debt repayment is recorded on-chain.

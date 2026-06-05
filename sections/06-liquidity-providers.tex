@@ -1,0 +1,59 @@
+\section{Liquidity Providers}
+\label{sec:lp}
+
+\subsection{NAV and Shares}
+
+LPs deposit USDC into the vault and receive ERC-20 shares. The vault's deployable capital at any point is:
+\begin{equation}
+  \texttt{idle} = \texttt{balance} - \texttt{settledWithdrawals} - \texttt{reservedBuffers}
+  \label{eq:idle}
+\end{equation}
+where \texttt{reservedBuffers} is the sum of all outstanding rate and option buffer escrows. The share price reflects the vault's net asset value---idle USDC, deployed capital via active loan buffers, and accrued but unredeemed interest, minus USDC ring-fenced for settled withdrawal epochs---divided by the outstanding supply, with a virtual offset against inflation attacks.
+
+Appreciation comes from three sources: debt-token redemption surplus when borrowers repay fixed obligations above realized variable costs, rate-buffer releases when escrows exceed realized funding costs, and option-buffer releases when swap hedges expire unused. There is no separate insurance fund or loss reserve. Impairments---from buffer exhaustion, adverse liquidations, or operational shortfalls---reduce the vault's USDC balance directly and are reflected in share price; LPs absorb residual risk through NAV adjustment rather than through a socialized loss pool.
+
+\subsection{Epoch Withdrawal}
+\label{subsec:withdrawal}
+
+Instant withdrawal is incompatible with capital deployed in active hedging reserves, per-loan buffer escrows, and transient liquidation bridges. The vault therefore queues exits in a four-step flow:
+
+\begin{enumerate}
+  \item \textbf{Request.} The LP burns vault shares and receives \emph{withdrawal receipt} tokens for the current epoch.
+  \item \textbf{Epoch elapses.} After the epoch duration, anyone can advance the epoch.
+  \item \textbf{Settlement.} A permissionless call snapshots the share price for all pending requests in that epoch and ring-fences the corresponding USDC, removing it from the vault's deployable idle balance.
+  \item \textbf{Redemption.} The LP burns receipt tokens and receives the ring-fenced USDC, net of a flat redemption fee.
+\end{enumerate}
+
+Until settlement, the LP remains economically exposed to pool gains and losses on the pending stake. The epoch delay is the mechanism that prevents withdrawing at a stale NAV while a loss event is about to land.
+
+\subsection{Revenue Model}
+
+The borrower's fixed rate decomposes into five economic charges:
+
+\begin{enumerate}
+  \item \textbf{Expected variable cost}---the median cumulative funding cost on the external venue over the term, passed through.
+  \item \textbf{Rate risk premium}---the spread above median covering the tail buffer carry, compensating the vault for absorbing rate mismatch.
+  \item \textbf{Option premium} (swap-path only)---the expected slippage hedge cost.
+  \item \textbf{Origination and protocol fees}---flat charges to vault and protocol.
+  \item \textbf{Portfolio concentration charge}---a marginal increase for loans that concentrate the book's tail risk on correlated collateral, naturally incentivizing diversification.
+\end{enumerate}
+
+The borrower pays more than the current variable rate because the fixed rate includes the cost of certainty. For Prime Trade positions, the platform also earns a builder fee on each trade routed through the protocol-controlled trading account---a per-trade revenue stream independent of the lending spread. The vault charges a performance fee on realized LP yield, settled per epoch, plus a flat redemption fee on withdrawals. LP share price tracks the portfolio's realized lending spread, not a utilization curve.
+
+\begin{table}[ht]
+  \centering
+  \small
+  \begin{tabular}{@{}lp{3.2cm}p{3.2cm}p{3.2cm}@{}}
+    \toprule
+    \textbf{Party} & \textbf{Risk borne} & \textbf{Why} & \textbf{Compensation} \\
+    \midrule
+    Borrower        & Collateral price decline      & Seeks levered exposure         & Fixed-rate USDC at committed terms \\
+    External venue  & Smart-contract, utilization    & Protocol-level money market    & Variable borrow rate \\
+    Rate buffer     & Variable rate ${>}$ fixed      & Rate-transform tranche         & Surplus on typical paths \\
+    Option buffer   & Swap cost ${>}$ escrow         & Isolates execution risk        & Escrow return ${\sim}$95\% \\
+    Vault LP        & Buffer exhaustion, timing      & Absorbs residual               & Margin + interest + surplus \\
+    \bottomrule
+  \end{tabular}
+  \caption{Risk decomposition. Each risk channel is routed to the participant with the comparative advantage to bear it.}
+  \label{tab:risk}
+\end{table}

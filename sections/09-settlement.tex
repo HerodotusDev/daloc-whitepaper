@@ -1,0 +1,35 @@
+\section{Settlement and Market Definitions}
+
+\subsection{Settlement Programs}
+
+The on-chain contracts are settlement executors: they verify Merkle proofs and execute committed transfers and hook chains, but contain no market-specific logic. All behavior---interest computation, liquidation detection, oracle selection, collateral policy---lives in configurable zero-knowledge programs whose outputs the contracts verify.
+
+Each market specifies four program hashes at creation: interest accrual, liquidation execution, and two state transitions (one per chain-side contract---collateral manager and debt issuer). Programs take loan state and on-chain data as inputs---including storage reads via cross-chain proofs where needed---and produce Merkle trees of authorized actions or individual fact attestations as outputs. Settlement programs split by economic cadence. \textbf{Matching} is one-time per accepted loan: a single epoch transition commits transfers, debt issuance, and CDP authorization. \textbf{Interest accrual} is periodic: independent facts per debt per time window, invoked on a schedule without advancing global epoch counters. \textbf{Liquidation} is event-triggered: health breaches produce liquidation leaves and facts, processed atomically. \textbf{Close} is a terminal on-chain transition after repayments and accrual catch up, enforced by on-chain accounting invariants.
+
+A single verification interface connects all programs to on-chain acceptance. The \emph{facts registry} accepts a fact hash and returns whether it is valid. Two fact types carry all state:
+
+A \textbf{state-transition fact} authorizes an epoch advance:
+\begin{equation}
+  f_{\mathit{st}} = \texttt{keccak256}\!\left(h_{\mathit{prog}},\; \mathit{chainId},\; \mathit{issuer},\; \mathit{epoch}_{\mathit{prev}},\; \mathit{epoch}_{\mathit{next}}\right)
+  \label{eq:stfact}
+\end{equation}
+where $\mathit{epoch}_{\mathit{prev}}$ and $\mathit{epoch}_{\mathit{next}}$ each encode the full quintuple of Merkle roots. An \textbf{interest fact} authorizes accrual on one debt:
+\begin{equation}
+  f_{\mathit{int}} = \texttt{keccak256}\!\left(h_{\mathit{rate}},\; \mathit{chainId},\; \mathit{debtId},\; t_{\mathit{from}},\; t_{\mathit{to}},\; \Delta I\right)
+  \label{eq:intfact}
+\end{equation}
+where $\Delta I$ is the interest amount over the accrual window $[t_{\mathit{from}}, t_{\mathit{to}})$. The on-chain contract reconstructs the expected fact hash from its immutable state, checks the registry, and applies the attested values only if the fact is valid. Cryptographic soundness rests on proof validity upstream of registration.
+
+Each epoch advance processes three concurrent generations of loan activity in a single state transition: finalizing loans whose collateral and principal settled two epochs prior, settling principal for loans matched one epoch prior, and matching newly submitted intents. This pipelining allows continuous throughput without blocking on individual loan finalization. When the solver is the platform's own vault operator, all three steps compress into a single epoch via an atomic multicall.
+
+\subsection{Collateral Manager and Debt Issuer}
+
+The \textbf{collateral manager} is the per-market contract on the collateral chain. It deploys each loan's CDP, enforces the market's collateral policy, and orchestrates the hook chains that compose origination and unwind pipelines. In a classical market, the collateral manager simply locks pledged assets and authorizes their release on repayment or liquidation. In a market whose zero-knowledge programs permit rehypothecation, the collateral manager additionally authorizes hooks that deploy collateral into yield-generating positions, route it through intermediate protocols, or use it to back additional obligations---all within the constraints defined by the market's programs. The collateral manager does not decide what is permitted; the programs do. The collateral manager enforces what they decided.
+
+The \textbf{debt issuer} is the per-market contract on the principal chain. It mints debt tokens when loans are funded, tracks per-loan interest accrual via verified facts, partitions repayment into principal reserve, interest reserve, and protocol fees, and enforces the accounting invariants that protect debt-token holders. Debt issuance and redemption are the debt issuer's sole responsibilities; it has no visibility into collateral state except through the epoch commitments that coordinate the two chains.
+
+\subsection{Oracle Freedom and Permissionless Markets}
+
+The protocol prescribes no fixed set of acceptable collateral, no hardcoded interest rate curve, and no privileged bridge for cross-chain settlement. Oracle logic is embedded in the market's zero-knowledge programs, not in the protocol. Programs read price or rate data from user-specified on-chain contracts via storage proofs, enforcing freshness and authenticity inside the proof rather than trusting off-chain feeds.
+
+Markets and their programs are open-source and can be created permissionlessly. Any participant can define a new market by specifying the asset pair and supplying programs that satisfy the interface. A market's programs are publicly visible---the logic governing collateral policy, interest accrual, and liquidation is auditable by anyone before interacting with it. The protocol verifies program outputs; it does not audit program logic. The responsibility for assessing a market's programs---and therefore its risk and correctness properties---rests with the participants who choose to interact with it. This openness is what enables the spectrum from conservative locked-collateral markets to aggressive rehypothecation strategies: the protocol provides the execution framework, and the market's programs define the rules.

@@ -1,0 +1,25 @@
+\section{Risk Quantification}
+
+\subsection{Dynamic Underwriting}
+
+Every loan quote must bound the lender's loss before capital is deployed. \daloc{} lends against volatile on-chain collateral under fixed terms and isolated positions: each loan's risk is priced on its own collateral path and, when a portfolio is supplied, against the desk's existing book. There is no hardcoded whitelist of supported collateral assets. The risk engine evaluates each candidate asset dynamically against current market and operating conditions and decides whether to accept it, reject it, or accept it with adjusted parameters. As conditions change, the engine continuously re-evaluates both new quotes and existing positions---tightening barriers on live loans, raising rates on new exposure, or halting origination entirely on an asset whose risk profile has deteriorated.
+
+The engine also evaluates liquidity conditions: available depth and expected slippage on both the liquidation venue and the external lending venue at the position's trade size. A collateral asset that passes volatility thresholds may still receive a lower credit multiplier or tighter barriers if liquidation at the quoted size would face material price impact. For Prime Trade positions, the engine additionally prices conditions on the target trading venue---perpetual funding rates, order book depth, and historical venue volatility---so that the credit line reflects not only collateral risk but also the execution environment where the borrowed capital will be deployed.
+
+Beyond market data, the engine assesses non-quantitative dimensions: smart contract risk of the asset itself (wrappers, restaking layers, complex tokens), issuer risk where applicable (stablecoin reserves, LST slashing exposure, bridge operator solvency), and infrastructure risk (oracles, bridges, and venue-side support for the external lending path). Maximum borrow, fixed rate, and liquidation diagnostics are \emph{outputs of the model}, not static protocol parameters---terms move with market volatility, liquidity depth, tenor, and portfolio concentration.
+
+\subsection{Methodology}
+
+The risk engine follows a three-stage pipeline: data collection, statistical modeling, and simulation.
+
+\textbf{Data collection.} The engine ingests live on-chain state---asset prices, lending-venue utilization rates, liquidity-pool depth, and historical return series---directly from the chains where collateral and principal reside. On-chain data is the source of truth; the engine does not rely on off-chain price feeds or third-party APIs for its core risk inputs.
+
+\textbf{Statistical modeling.} Collected data is processed through statistical models that estimate the current volatility regime, tail-risk characteristics, and correlation structure of the collateral asset. The models are designed to capture asymmetric behavior---downside moves contributing more to risk estimates than equivalent upside moves---and to account for discontinuous price events that continuous models would understate. The specific models, calibration windows, and estimation techniques are internal to the risk engine and may evolve over time as market conditions and research warrant.
+
+\textbf{Simulation.} The engine runs Monte Carlo simulations over the loan horizon, projecting collateral price paths and variable-rate funding cost paths under the estimated statistical regime. Simulated paths are evaluated against the loan's liquidation barriers and the protocol's actual liquidation mechanics---partial versus full close, bonuses, and route slippage---so that pricing reflects path-dependent recovery, not a binary barrier flag. The simulation outputs a joint distribution of liquidation probability and loss given default, which feeds directly into the pricing module.
+
+\subsection{Pricing}
+
+The published credit multiplier and rate are chosen jointly to balance the lender's expected return, position economics, and incremental tail risk when the new loan sits beside existing positions.
+
+Higher volatility or longer duration lowers the credit multiplier; adding correlated exposure to an already concentrated book raises the rate. Conversely, positions that reduce the platform's aggregate tail risk---such as hedged or delta-neutral strategies---receive more favorable terms, naturally incentivizing portfolio diversification. The rate never falls below the tenor-matched risk-free return plus the simulated expected loss per dollar lent---interest must cover opportunity cost and expected liquidation cost before any markup. With principal $L$, annualized rate $r$, and horizon $T$ in years, debt at maturity is $D = L(1 + rT)$, linking the quoted rate directly to the liquidation barrier and simulated loss distribution.

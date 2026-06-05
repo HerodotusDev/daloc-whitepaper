@@ -1,0 +1,21 @@
+\section{Discussion}
+
+\subsection{Risks}
+
+External liquidity sourcing expands the platform's capital efficiency but introduces exposure to the lending venues it relies on. A governance change at the underlying venue---a reduction in loan-to-value ceilings, an increase in liquidation bonuses, or a modification to rate curves---can directly affect the economics of positions that source liquidity through it.
+
+Rate risk and price risk are not independent. In a market crash, collateral value drops and utilization on external venues spikes simultaneously. The variable rate the platform pays rises precisely when the collateral buffer shrinks. Hedging reserves sized under an assumption of independent rate and price dynamics may prove insufficient in a correlated regime. The risk engine continuously recalibrates against live on-chain data, but joint crash dynamics---where rates spike precisely as prices fall---remain a structural challenge for any fixed-rate lending platform.
+
+At scale, the platform's own activity can influence the external venues it relies on. A large volume of \daloc{}-originated borrowing increases utilization on the underlying venue, raising its variable rate and reducing the spread between the fixed rate charged to borrowers and the cost of capital. This creates a natural scale ceiling---the platform becomes less competitive as its own footprint grows on any single venue. Diversification across venues mitigates but does not eliminate the constraint.
+
+Markets that permit rehypothecation introduce additional risk dimensions. While zero-knowledge programs enforce the defined collateral policy cryptographically, the policy itself may expose positions to correlated failures across the venues where collateral is deployed. Participants must evaluate the market's programs before interacting---the protocol ensures correct execution of the rules, not the prudence of the rules themselves.
+
+\subsection{Future Capabilities}
+
+In the current release, credit lines are bounded by pledged collateral value and each position is fully isolated. The architecture is designed to accommodate a wider range of positions and risk-engine capabilities over time.
+
+The protocol-controlled custody model described in Section~\ref{sec:crosschain}---where borrowed capital cannot leave the constrained execution environment---can extend to credit lines exceeding collateral value: because the protocol controls the capital and repayment is mechanical, the credit decision reduces to risk-engine parameterization rather than a trust decision.
+
+Cross-margining across positions---aggregating collateral value across a borrower's active loans---can recover the capital efficiency that per-loan isolation foregoes, without abandoning per-loan risk boundaries. Individual CDPs retain their own collateral and liquidation logic, while a higher-level accounting layer recognizes offsetting positions across loans for the purpose of reduced buffer sizing or increased borrowing capacity.
+
+The solver set can expand to additional venues and execution strategies, and the market-definition system can accommodate new collateral types, settlement programs, and collateral policies as they are created and adopted. Because markets, programs, and solvers are independently extensible, the range of supported positions grows without requiring changes to the core protocol contracts. The hook composition system imposes no limit on pipeline complexity---new hook types for new venue interactions or collateral strategies can be added without modifying existing hooks or the settlement layer.
