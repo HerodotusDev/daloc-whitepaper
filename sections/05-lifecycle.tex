@@ -4,11 +4,13 @@
 
 Origination follows a request-for-quote flow routed through the unified order book. A borrower posts a request specifying the collateral chain and asset, the principal chain and asset, the amount, and the term. The request enters the order book as a standard entry. Solvers respond with quotes---structurally identical entries on the other side of the book---specifying rate, execution path, and hook chain. The risk engine evaluates the request against live market conditions and produces a credit multiplier, a fixed rate, and barrier thresholds. Before on-chain execution, both parties cryptographically commit to terms, so neither party can be surprised by the settlement outcome. The accepted quote and its hook chain are committed into an epoch's settlement tree and executed atomically.
 
-The initial release supports four sourcing paths, each assembled as a hook chain:
+The initial release supports five sourcing paths, each assembled as a hook chain:
 
-\textbf{Direct path.} For venue-listed collateral (e.g.\ WETH): the hook chain reserves the rate buffer, supplies collateral to the external venue, borrows USDC principal, and transfers it to the borrower---all within a single atomic transaction. Concretely: a borrower deposits 0.2~ETH into the CDP; the hooks supply the ETH to the external venue, borrow 200~USDC, and deliver it to the borrower; a rate buffer of 10~USDC is escrowed in the vault.
+\textbf{Vault-direct path.} When vault capacity permits: the vault transfers USDC principal directly to the borrower (or to the margin agent for Prime Trade positions). The CDP holds collateral without supplying it to an external venue. No rate buffer or option buffer is reserved---the vault bears the fixed-rate exposure directly as the lender of record. This is the simplest origination: fewer hooks, no external-venue dependency, no rate-transform risk.
 
-\textbf{Swap path.} For long-tail collateral (e.g.\ LDO, UNI): a swap hook converts collateral to a venue-listed intermediate, then the chain proceeds as direct with both rate buffer and option buffer reserved. Extends fixed-rate access beyond the external venue's asset list at the cost of slippage escrow.
+\textbf{Direct path.} For venue-listed collateral (e.g.\ WETH) when vault capacity is insufficient: the hook chain reserves the rate buffer, supplies collateral to the external venue, borrows USDC principal, and transfers it to the borrower---all within a single atomic transaction. Concretely: a borrower deposits 0.2~ETH into the CDP; the hooks supply the ETH to the external venue, borrow 200~USDC, and deliver it to the borrower; a rate buffer of 10~USDC is escrowed in the vault.
+
+\textbf{Swap path.} For long-tail collateral (e.g.\ LDO, UNI) on the external path: a swap hook converts collateral to a venue-listed intermediate, then the chain proceeds as direct with both rate buffer and option buffer reserved. Extends fixed-rate access beyond the external venue's asset list at the cost of slippage escrow.
 
 \textbf{Margin path.} For venue-listed collateral with principal bridged to Hyperliquid: same as direct, but a bridge hook burns the principal via Circle's Cross-Chain Transfer Protocol (CCTP) to a per-loan margin agent on HyperEVM instead of transferring it to the borrower on Ethereum (Section~\ref{sec:crosschain}).
 
@@ -38,14 +40,24 @@ The initial release supports four sourcing paths, each assembled as a hook chain
       {rate buffer\\escrowed in vault};
     \end{tikzpicture}%
   }
-  \caption{Origination---direct lending path. Borrower pledges WETH; the hook chain supplies it to the external venue, borrows USDC, and delivers it. Debt tokens are minted to the vault as creditor; the rate buffer is escrowed in the vault.}
+  \caption{Origination---externally-sourced direct path. Borrower pledges WETH; the hook chain supplies it to the external venue, borrows USDC, and delivers it. Debt tokens are minted to the vault as creditor; the rate buffer is escrowed. Vault-direct origination omits the external venue---the vault transfers principal directly to the borrower.}
   \label{fig:origination}
 \end{figure}
+
+\subsection{Refinancing}
+
+Not every loan runs to its original maturity. A borrower approaching term, or facing changed market conditions, can refinance through the order book rather than repaying and re-borrowing manually.
+
+The borrower posts a refinancing intent specifying the existing loan and desired new terms---extended maturity, adjusted rate, or modified principal. Solvers respond with refinancing quotes; the matching engine treats these identically to origination quotes---same objects, same settlement pipeline. On match, the existing loan is closed and a new loan is originated atomically within the same epoch transition. Collateral remains in the same CDP when the market is unchanged; the borrower experiences a seamless rollover with no intermediate capital movement.
+
+When the Harvest Vault is the creditor on both the old and new loan, the refinancing is a pure accounting event: the vault redeems its debt tokens on the closing loan and receives new debt tokens on the replacement---no external capital moves, no hook chain touches an external venue. This makes vault-funded refinancing operationally trivial and economically costless beyond the rate adjustment.
+
+Refinancing serves three purposes. First, borrowers avoid forced liquidation at maturity---a loan that cannot be repaid at term can be rolled into a new position at current market rates rather than triggering a close event. Second, rates adjust to current conditions---a borrower who originated at 10\% in a high-volatility regime can refinance at 7\% once conditions normalize, without unwinding and re-entering manually. Third, the platform retains AUM that would otherwise exit---refinanced loans stay on the book, preserving vault utilization and solver revenue.
 
 \subsection{Close and Liquidation}
 
 Repayment follows a two-phase process. First, the borrower deposits USDC into the debt token contract, increasing its redeemable reserve. The contract locks redemptions until the next interest accrual is verified---a safety property that prevents creditors from redeeming at a stale price before the protocol fee on outstanding interest is recorded. Second, the vault redeems its debt tokens, receiving USDC proportional to the current claim value (principal plus accrued interest), and routes the USDC to the CDP for variable-rate debt repayment on the external venue.
 
-On voluntary close, the platform unwinds the external position atomically via a close hook chain: releases hedging reserves to the CDP, repays the remaining variable debt, withdraws the collateral, and returns it to the borrower. For swap-path loans, the chain includes a reverse swap from the intermediate asset back to the original collateral. Any hedging surplus---the difference between reserved buffers and realized costs---stays in the vault as LP yield.
+On voluntary close, the platform unwinds the external position atomically via a close hook chain: releases hedging reserves to the CDP, repays the remaining variable debt, withdraws the collateral, and returns it to the borrower. For swap-path loans, the chain includes a reverse swap from the intermediate asset back to the original collateral. Any hedging surplus---the difference between reserved buffers and realized costs---stays in the vault as LP yield. Vault-funded loans skip the external unwind entirely: the borrower repays, the vault redeems debt tokens, and collateral is released from the CDP.
 
 Liquidation spans two epochs. In the first, a proof attesting the liquidatable state is committed as a leaf in the epoch's liquidation root---detection is identity-agnostic, requiring only the mathematical fact that barriers have been breached. In the second, the liquidator identifies itself on-chain, repays the outstanding debt via the debt token contract, and seizes collateral from the CDP at a risk-engine-determined price. Separating detection from seizure ensures that collateral moves only after debt repayment is recorded on-chain.
