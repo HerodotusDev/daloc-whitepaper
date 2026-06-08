@@ -1,21 +1,45 @@
-\section{Liquidity Providers}
+\section{The Harvest Vault}
 \label{sec:lp}
+
+The Harvest Vault gives passive LPs pool-style UX while an operator deploys capital into loans under a publicly auditable mandate verified per-epoch by zero-knowledge proof.
+
+\subsection{Operator and Mandate}
+
+The operator's strategy is bounded by a \textbf{mandate}, a policy committed on-chain as a hash at vault deployment. The mandate specifies:
+\begin{itemize}
+  \item \textbf{Allowed collateral set:} asset addresses the operator may accept as loan collateral.
+  \item \textbf{Per-collateral LTV ceiling:} maximum loan-to-value ratio the operator may offer on each collateral type.
+  \item \textbf{Per-tenor rate floor:} minimum annualized rate the operator must charge, ensuring the vault never underwrites below a specified spread.
+  \item \textbf{Portfolio concentration caps:} maximum exposure per borrower, per collateral type, and per market as a fraction of vault NAV.
+  \item \textbf{Liquidation reserve requirement:} minimum idle capital maintained at all times for liquidation response and withdrawal settlement.
+\end{itemize}
+
+The mandate constrains what the operator \emph{can} do, not what they \emph{must} do; within its bounds, the operator retains full discretion.
+
+\subsection{Compliance Proof}
+
+Each epoch, the operator produces a zero-knowledge proof that every action satisfied the mandate. The proof takes prior vault state, the epoch's actions, and the mandate hash as public inputs, outputting a \textbf{compliance fact} registered in the facts registry (Section~\ref{sec:settlement}):
+\begin{equation}
+  \begin{split}
+    f_{\mathit{compliance}} &= \khash(h_{\mathit{prog}},\, \mathit{chainId},\, \mathit{vault}, \\
+    &\qquad \mathit{epoch}_{\mathit{prev}},\, \mathit{epoch}_{\mathit{next}},\, h_{\mathit{mandate}})
+  \end{split}
+  \label{eq:compliancefact}
+\end{equation}
+where $h_{\mathit{prog}}$ is the compliance program hash, $\mathit{vault}$ is the vault contract address, and $h_{\mathit{mandate}}$ is the committed mandate hash.
+
+\subsection{Fee-Gating}
+
+The operator earns a spread fee escrowed during each epoch. A valid compliance proof releases the escrow to the operator; otherwise it flows back into NAV. An invalid or missing proof does not halt loan settlement or affect borrowers; only the operator's cut is at risk.
 
 \subsection{NAV and Shares}
 
-LPs deposit USDC into the vault and receive ERC-20 shares. The vault's deployable capital at any point is:
-\begin{equation}
-  \texttt{idle} = \texttt{balance} - \texttt{settledWithdrawals} - \texttt{reservedBuffers}
-  \label{eq:idle}
-\end{equation}
-where \texttt{reservedBuffers} is the sum of all outstanding rate and option buffer escrows. The share price reflects the vault's net asset value---idle USDC, deployed capital via active loan buffers, and accrued but unredeemed interest, minus USDC ring-fenced for settled withdrawal epochs---divided by the outstanding supply, with a virtual offset against inflation attacks.
-
-Appreciation comes from three sources: debt-token redemption surplus when borrowers repay fixed obligations above realized variable costs, rate-buffer releases when escrows exceed realized funding costs, and option-buffer releases when swap hedges expire unused. There is no separate insurance fund or loss reserve. Impairments---from buffer exhaustion, adverse liquidations, or operational shortfalls---reduce the vault's USDC balance directly and are reflected in share price; LPs absorb residual risk through NAV adjustment rather than through a socialized loss pool.
+LPs deposit USDC and receive ERC-20 shares. NAV equals idle USDC plus debt-token claim values plus escrowed hedging buffers plus accrued interest, less USDC ring-fenced for pending withdrawals. Share price is NAV per outstanding supply, with a virtual offset against inflation attacks. Yield comes from fixed-rate interest (vault-funded loans), buffer surplus (externally-sourced loans), and liquidation proceeds. Impairments reduce NAV directly via share-price adjustment.
 
 \subsection{Epoch Withdrawal}
 \label{subsec:withdrawal}
 
-Instant withdrawal is incompatible with capital deployed in active hedging reserves, per-loan buffer escrows, and transient liquidation bridges. The vault therefore queues exits in a four-step flow:
+Instant withdrawal is incompatible with capital in active positions. The vault queues exits in four steps:
 
 \begin{enumerate}
   \item \textbf{Request.} The LP burns vault shares and receives \emph{withdrawal receipt} tokens for the current epoch.
@@ -24,36 +48,25 @@ Instant withdrawal is incompatible with capital deployed in active hedging reser
   \item \textbf{Redemption.} The LP burns receipt tokens and receives the ring-fenced USDC, net of a flat redemption fee.
 \end{enumerate}
 
-Until settlement, the LP remains economically exposed to pool gains and losses on the pending stake. The epoch delay is the mechanism that prevents withdrawing at a stale NAV while a loss event is about to land.
+Until settlement, the LP remains exposed to pool gains and losses. The epoch delay prevents withdrawing at a stale NAV before a loss lands.
 
-\subsection{Revenue Model}
-
-The borrower's fixed rate decomposes into five economic charges:
-
-\begin{enumerate}
-  \item \textbf{Expected variable cost}---the median cumulative funding cost on the external venue over the term, passed through.
-  \item \textbf{Rate risk premium}---the spread above median covering the tail buffer carry, compensating the vault for absorbing rate mismatch.
-  \item \textbf{Option premium} (swap-path only)---the expected slippage hedge cost.
-  \item \textbf{Origination and protocol fees}---flat charges to vault and protocol.
-  \item \textbf{Portfolio concentration charge}---a marginal increase for loans that concentrate the book's tail risk on correlated collateral, naturally incentivizing diversification.
-\end{enumerate}
-
-The borrower pays more than the current variable rate because the fixed rate includes the cost of certainty. For Prime Trade positions, the platform also earns a builder fee on each trade routed through the protocol-controlled trading account---a per-trade revenue stream independent of the lending spread. The vault charges a performance fee on realized LP yield, settled per epoch, plus a flat redemption fee on withdrawals. LP share price tracks the portfolio's realized lending spread, not a utilization curve.
+\subsection{Risk Decomposition}
 
 \begin{table}[ht]
   \centering
   \small
-  \begin{tabular}{@{}lp{3.2cm}p{3.2cm}p{3.2cm}@{}}
+  \begin{tabular}{@{}llll@{}}
     \toprule
     \textbf{Party} & \textbf{Risk borne} & \textbf{Why} & \textbf{Compensation} \\
     \midrule
-    Borrower        & Collateral price decline      & Seeks levered exposure         & Fixed-rate USDC at committed terms \\
-    External venue  & Smart-contract, utilization    & Protocol-level money market    & Variable borrow rate \\
-    Rate buffer     & Variable rate ${>}$ fixed      & Rate-transform tranche         & Surplus on typical paths \\
-    Option buffer   & Swap cost ${>}$ escrow         & Isolates execution risk        & Escrow return ${\sim}$95\% \\
-    Vault LP        & Buffer exhaustion, timing      & Absorbs residual               & Margin + interest + surplus \\
+    Borrower       & Collateral decline     & Seeks leverage      & Fixed-rate USDC \\
+    Ext.\ venue    & Smart-contract, util.  & Money market         & Variable rate \\
+    Rate buffer    & Variable ${>}$ fixed   & Rate transform       & Surplus \\
+    Option buffer  & Swap cost ${>}$ escrow & Execution risk       & Escrow ${\sim}$95\% \\
+    Vault LP       & Default, exhaustion    & Absorbs residual     & Coupon or surplus \\
+    Operator       & Mandate violation      & Active mgmt          & Fee, gated on proof \\
     \bottomrule
   \end{tabular}
-  \caption{Risk decomposition. Each risk channel is routed to the participant with the comparative advantage to bear it.}
+  \caption{Risk decomposition. Each risk channel is routed to the participant with the comparative advantage to bear it. The rate buffer and option buffer rows apply only to externally-sourced loans.}
   \label{tab:risk}
 \end{table}

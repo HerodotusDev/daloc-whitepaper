@@ -1,6 +1,7 @@
 # Suppress warnings that conflict with this project's style.
 #
 #  1 - Command terminated with space.
+#  4 - Italic correction (`\/') — false positive inside \UrlBreaks definition.
 #  8 - Wrong length of dash.
 #  9 - `]' expected, found `)' — half-open intervals [a, b) are intentional.
 # 12 - Interword spacing (`\ ') — false positive after \emph{}, \daloc{}, etc.
@@ -8,9 +9,11 @@
 # 17 - Mismatched brackets — false positive from multi-file \input processing.
 # 24 - Delete this space to maintain correct pagereferences.
 # 36 - Vertical rules in tables.
+# 38 - Punctuation in front of quotes — standard English style (period inside closing quotes).
 # 44 - User Regex.
 CmdLine {
   -n1
+  -n4
   -n8
   -n9
   -n12
@@ -18,5 +21,6 @@ CmdLine {
   -n17
   -n24
   -n36
+  -n38
   -n44
 }

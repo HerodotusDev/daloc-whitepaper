@@ -1,29 +1,35 @@
 \section{Position Tokens and Secondary Markets}
+\label{sec:tokens}
+
+Each funded loan produces a tokenized position representing the lender's claim. These tokens carry accrual, enforce solvency rules, and trade on secondary markets.
 
 \subsection{Debt Tokens}
 
-Each funded loan issues a transferable ERC-20 whose face value is one unit of the principal asset per token. The token is the lender's economic position. The claim value per token is:
+Each funded loan issues a transferable ERC-20 whose face value is one unit of the principal asset per token. The token is the lender's economic position. The claim value per token $v$ (the amount redeemable at maturity) is:
 \begin{equation}
-  \texttt{pricePerDebtToken} = 1 + \texttt{cumulativeInterestPerToken}
+  v = 1 + I_{\mathrm{cum}}
   \label{eq:debtprice}
 \end{equation}
-rising as interest is accrued and verified. Interest accrues linearly at the loan's fixed rate:
+where $I_{\mathrm{cum}}$ is the cumulative interest accrued per token, rising as interest is verified. Interest accrues linearly at the loan's fixed rate:
 \begin{equation}
-  \Delta I = D \cdot r \cdot \frac{\Delta t}{T_{\mathit{year}}}
+  \Delta I = D \cdot r \cdot \frac{\Delta t}{T_{\mathrm{year}}}
   \label{eq:interest}
 \end{equation}
-where $D$ is the outstanding debt in token units, $r$ the annualized rate, $\Delta t$ the accrual period in seconds, and $T_{\mathit{year}} = 365.25 \times 86{,}400$. Each accrual requires a valid interest fact (Equation~\ref{eq:intfact}) attesting the computed amount. When borrowers repay, cash enters a principal reserve; a subsequent accrual step, backed by a proof tied to the market's rate program, reclassifies the interest portion: \textbf{20\%} to the protocol and \textbf{80\%} into the per-token index and an interest reserve backing redemptions. Holders who redeem burn tokens and receive principal (1:1 face value) plus their share of the interest index.
+where $D$ is the outstanding debt in token units, $r$ the annualized rate, $\Delta t$ the accrual period in seconds, and $T_{\mathrm{year}} = 365.25 \times 86{,}400$. Each accrual requires a valid interest fact (Equation~\ref{eq:intfact}) attesting the computed amount.
 
-The contract maintains a strict accounting identity: every unit of principal is partitioned into a redeemable reserve, an interest reserve, and protocol fees reserved for collection. No unattributed balance can exist; the sum of all three reserves equals the contract's token balance at all times.
+Repayment proceeds enter a principal reserve. A subsequent accrual step, backed by a proof tied to the market's rate program, splits the interest portion into a protocol fee and an interest reserve. Holders redeem by burning tokens and receiving principal plus their share of the interest index.
 
-Two rules protect solvency and fee collection. \emph{Redemption lock:} after new cash enters from repayment or liquidation, redemptions are blocked until interest for that period is accrued, so lenders cannot exit at the pre-fee index. \emph{Close:} the loan can be marked closed only when accrual is current and the principal reserve covers all outstanding tokens.
+The contract maintains a strict accounting identity:
+\begin{equation}
+  R_{\mathit{principal}} + R_{\mathit{interest}} + F_{\mathit{protocol}} = B_{\mathit{token}}
+  \label{eq:accounting}
+\end{equation}
+where $R_{\mathit{principal}}$ is the redeemable principal reserve, $R_{\mathit{interest}}$ the interest reserve, $F_{\mathit{protocol}}$ the accrued protocol fees, and $B_{\mathit{token}}$ the contract's token balance. Two rules protect solvency. First, redemptions are blocked until interest for the latest period is accrued, preventing exits at a stale index. Second, a loan can be marked closed only when accrual is current and the principal reserve covers all outstanding tokens.
 
-\subsection{Vault Shares}
-
-LPs hold vault shares whose value tracks the portfolio's realized spread. Shares are standard ERC-20. The share price reflects the vault's net asset value per outstanding share, increasing when hedging surpluses are released and decreasing only when buffer exhaustion or adverse liquidations reduce the vault's USDC balance. While loans are live, the vault is the creditor of record on each loan's debt token: the vault's economic return arrives when repayments unlock redemption and debt tokens are converted to USDC at the current claim value (Equation~\ref{eq:debtprice}). Exits follow the epoch-based withdrawal described in Section~\ref{subsec:withdrawal}.
+Debt tokens from criteria-restricted markets carry transfer-time criteria (e.g.\ ``KYC tier~$\geq$~2'') enforced at the hub-routed transfer step, ensuring restrictions persist after origination. When the Harvest Vault is creditor, vault shares (Section~\ref{sec:lp}) reflect the aggregate claim value across all held debt tokens.
 
 \subsection{Secondary Markets}
 
-Debt tokens are standard ERC-20, so creditors can sell loan exposure on any secondary venue without protocol modification. A buyer acquires the right to outstanding principal and all future interest at the current claim value. Because the interest accumulator is global to each token contract, buyers step into the same index without a protocol assignment step---enabling OTC or on-chain secondary liquidity.
+A lender who needs liquidity before maturity sells on secondary markets. Debt tokens are standard ERC-20, tradeable on any venue without protocol modification.
 
-Each loan produces its own token, in contrast with protocols that settle into fungible units across all positions in a market~\cite{midnight2025}. The per-loan design enables independently tradeable positions with distinct interest accumulators and reserve pairs---granular risk transfer that pool-based or market-fungible designs cannot offer without off-chain registry layers.
+\textbf{Credit-risk price discovery.} Two loans with identical face value can trade at different prices reflecting divergent default expectations --- the on-chain analog of a credit spread. Pool-based lending cannot produce this signal because every position earns the same rate. Each loan's distinct token~\cite{midnight2025} enables granular risk transfer.
