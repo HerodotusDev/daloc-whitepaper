@@ -1,24 +1,24 @@
 \section{The Harvest Vault}
 \label{sec:lp}
 
-The Harvest Vault gives passive LPs pool-style UX while the operator runs an active lending strategy, bounded by a publicly auditable mandate and verified per-epoch by zero-knowledge proof.
+The Harvest Vault gives passive LPs pool-style UX while an operator deploys capital into loans under a publicly auditable mandate verified per-epoch by zero-knowledge proof.
 
 \subsection{Operator and Mandate}
 
-The operator's strategy is bounded by a \textbf{mandate}, a policy object committed on-chain as a hash at vault deployment. The mandate specifies:
+The operator's strategy is bounded by a \textbf{mandate}, a policy committed on-chain as a hash at vault deployment. The mandate specifies:
 \begin{itemize}
   \item \textbf{Allowed collateral set:} asset addresses the operator may accept as loan collateral.
-  \item \textbf{Per-collateral LTV ceiling:} maximum credit multiplier the operator may offer on each collateral type.
+  \item \textbf{Per-collateral LTV ceiling:} maximum loan-to-value ratio the operator may offer on each collateral type.
   \item \textbf{Per-tenor rate floor:} minimum annualized rate the operator must charge, ensuring the vault never underwrites below a specified spread.
   \item \textbf{Portfolio concentration caps:} maximum exposure per borrower, per collateral type, and per market as a fraction of vault NAV.
   \item \textbf{Liquidation reserve requirement:} minimum idle capital maintained at all times for liquidation response and withdrawal settlement.
 \end{itemize}
 
-The mandate constrains what the operator \emph{can} do, not what they \emph{must} do; within its bounds, the operator retains full discretion. The full mandate specification is public and auditable.
+The mandate constrains what the operator \emph{can} do, not what they \emph{must} do; within its bounds, the operator retains full discretion.
 
 \subsection{Compliance Proof}
 
-Each epoch, the operator produces a zero-knowledge proof attesting that every action taken satisfied the mandate. The proof takes prior vault state, the epoch's operator actions, and the mandate hash as public inputs, and outputs a \textbf{compliance fact} registered in the facts registry (Section~\ref{sec:settlement}):
+Each epoch, the operator produces a zero-knowledge proof that every action satisfied the mandate. The proof takes prior vault state, the epoch's actions, and the mandate hash as public inputs, outputting a \textbf{compliance fact} registered in the facts registry (Section~\ref{sec:settlement}):
 \begin{equation}
   \begin{split}
     f_{\mathit{compliance}} &= \khash(h_{\mathit{prog}},\, \mathit{chainId},\, \mathit{vault}, \\
@@ -34,12 +34,12 @@ The operator earns a spread fee escrowed during each epoch. A valid compliance p
 
 \subsection{NAV and Shares}
 
-LPs deposit USDC and receive ERC-20 shares. NAV comprises idle USDC, debt-token claim values, escrowed hedging buffers, and accrued interest, minus USDC ring-fenced for pending withdrawals. The share price reflects NAV per outstanding supply, with a virtual offset against inflation attacks. Appreciation comes from fixed-rate interest on vault-funded loans, buffer surplus releases on externally-sourced loans, and liquidation proceeds. Impairments reduce NAV directly; LPs absorb residual risk through share-price adjustment.
+LPs deposit USDC and receive ERC-20 shares. NAV equals idle USDC plus debt-token claim values plus escrowed hedging buffers plus accrued interest, less USDC ring-fenced for pending withdrawals. Share price is NAV per outstanding supply, with a virtual offset against inflation attacks. Yield comes from fixed-rate interest (vault-funded loans), buffer surplus (externally-sourced loans), and liquidation proceeds. Impairments reduce NAV directly via share-price adjustment.
 
 \subsection{Epoch Withdrawal}
 \label{subsec:withdrawal}
 
-Instant withdrawal is incompatible with capital deployed in active positions, per-loan buffer escrows, and transient liquidation bridges. The vault queues exits in a four-step flow:
+Instant withdrawal is incompatible with capital in active positions. The vault queues exits in four steps:
 
 \begin{enumerate}
   \item \textbf{Request.} The LP burns vault shares and receives \emph{withdrawal receipt} tokens for the current epoch.
@@ -48,11 +48,9 @@ Instant withdrawal is incompatible with capital deployed in active positions, pe
   \item \textbf{Redemption.} The LP burns receipt tokens and receives the ring-fenced USDC, net of a flat redemption fee.
 \end{enumerate}
 
-Until settlement, the LP remains exposed to pool gains and losses. The epoch delay prevents withdrawing at a stale NAV while a loss event is about to land.
+Until settlement, the LP remains exposed to pool gains and losses. The epoch delay prevents withdrawing at a stale NAV before a loss lands.
 
-\subsection{Revenue Model}
-
-The portfolio blend between vault-funded and externally-sourced loans (Figure~\ref{fig:capital}) is jointly determined by the operator's mandate and the risk engine's pricing.
+\subsection{Risk Decomposition}
 
 \begin{table}[ht]
   \centering
