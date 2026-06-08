@@ -1,63 +1,103 @@
 \section{Loan Lifecycle}
+\label{sec:lifecycle}
 
 \subsection{Origination}
 
-Origination follows a request-for-quote flow routed through the unified order book. A borrower posts a request specifying the collateral chain and asset, the principal chain and asset, the amount, and the term. The request enters the order book as a standard entry. Solvers respond with quotes---structurally identical entries on the other side of the book---specifying rate, execution path, and hook chain. The risk engine evaluates the request against live market conditions and produces a credit multiplier, a fixed rate, and barrier thresholds. Before on-chain execution, both parties cryptographically commit to terms, so neither party can be surprised by the settlement outcome. The accepted quote and its hook chain are committed into an epoch's settlement tree and executed atomically.
+A borrower posts a request, solvers respond with quotes, and the accepted quote is committed into an epoch's settlement tree and executed atomically. Four origination pipelines exist, each assembled as an atomic hook chain:
 
-The initial release supports five sourcing paths, each assembled as a hook chain:
+\textbf{Vault-funded.} The vault transfers USDC principal directly to the borrower (or to the margin agent for Prime Trade positions). The collateral manager holds collateral without supplying it to an external venue; no hedging buffers are reserved.
 
-\textbf{Vault-direct path.} When vault capacity permits: the vault transfers USDC principal directly to the borrower (or to the margin agent for Prime Trade positions). The CDP holds collateral without supplying it to an external venue. No rate buffer or option buffer is reserved---the vault bears the fixed-rate exposure directly as the lender of record. This is the simplest origination: fewer hooks, no external-venue dependency, no rate-transform risk.
+\textbf{Externally-sourced.} The hook chain deposits collateral into the collateral manager, supplies it to the external venue, borrows USDC against it, and transfers the USDC to the borrower. A rate buffer is escrowed to hedge the mismatch between the borrower's fixed rate and the venue's variable rate.
 
-\textbf{Direct path.} For venue-listed collateral (e.g.\ WETH) when vault capacity is insufficient: the hook chain reserves the rate buffer, supplies collateral to the external venue, borrows USDC principal, and transfers it to the borrower---all within a single atomic transaction. Concretely: a borrower deposits 0.2~ETH into the CDP; the hooks supply the ETH to the external venue, borrow 200~USDC, and deliver it to the borrower; a rate buffer of 10~USDC is escrowed in the vault.
+\textbf{Externally-sourced with collateral swap.} For long-tail collateral not listed on the external venue (e.g.\ LDO, UNI): a swap hook converts the collateral to a venue-listed intermediate (e.g.\ LDO $\to$ WETH), then the chain proceeds as above. Both a rate buffer and an option buffer are reserved; the option buffer covers the round-trip swap cost at close.
 
-\textbf{Swap path.} For long-tail collateral (e.g.\ LDO, UNI) on the external path: a swap hook converts collateral to a venue-listed intermediate, then the chain proceeds as direct with both rate buffer and option buffer reserved. Extends fixed-rate access beyond the external venue's asset list at the cost of slippage escrow.
-
-\textbf{Margin path.} For venue-listed collateral with principal bridged to Hyperliquid: same as direct, but a bridge hook burns the principal via Circle's Cross-Chain Transfer Protocol (CCTP) to a per-loan margin agent on HyperEVM instead of transferring it to the borrower on Ethereum (Section~\ref{sec:crosschain}).
-
-\textbf{Margin-swap path.} Combines the swap-path collateral conversion with the margin-path delivery: swap hook, option buffer, borrow hooks, then CCTP bridge hook.
+\textbf{Hyperliquid margin.} For Prime Trade positions, the hook chain follows either pipeline above but diverts at the final step: instead of transferring USDC to the borrower, a bridge hook burns it via CCTP~\cite{cctp} to a per-loan margin agent on HyperEVM, which deposits it as margin (Section~\ref{sec:crosschain}). Collateral never leaves Ethereum.
 
 \begin{figure}[ht]
   \centering
-  \resizebox{\textwidth}{!}{%
-    \begin{tikzpicture}[
-        box/.style={draw, rounded corners=3pt, minimum height=1.2cm, minimum width=2.8cm,
-        align=center, font=\small\sffamily},
-        arr/.style={-{Stealth[length=6pt]}, thick},
-        lab/.style={font=\scriptsize\sffamily, fill=white, inner sep=1pt},
-        node distance=1.2cm and 2.2cm
-      ]
-      \node[box] (B)  {Borrower};
-      \node[box, right=of B]  (CDP) {CDP};
-      \node[box, right=of CDP] (AV)  {External Venue};
-      \node[box, right=of AV]  (V)   {Vault};
+  \begin{tikzpicture}[
+      box/.style={draw, thick, rounded corners=3pt, fill=gray!8,
+      minimum height=1.2cm, minimum width=2.8cm, align=center, font=\small\sffamily},
+      arr/.style={-{Stealth[length=8pt]}, thick},
+      lab/.style={font=\small\sffamily, fill=white, inner sep=3pt}
+    ]
+    \node[box] (B)   at (0,0)      {Borrower};
+    \node[box] (CDP) at (0,-2.5)   {CDP};
+    \node[box] (AV)  at (0,-5)     {Ext.\ Venue};
+    \node[box] (V)   at (4.5,-2.5) {Vault};
 
-      \draw[arr] (B)   -- node[lab,above]{WETH} (CDP);
-      \draw[arr] (CDP) -- node[lab,above]{supply} (AV);
-      \draw[arr] (AV)  -- node[lab,below]{USDC} (CDP);
-      \draw[arr] (CDP) -- node[lab,below]{USDC} (B);
-      \draw[arr] (CDP.south) -- ++(0,-0.6) -| node[lab,below,pos=0.25]{debt tokens (minted)} (V.south);
-      \node[font=\scriptsize\sffamily, below=1.2cm of V, text width=3cm, align=center]
-      {rate buffer\\escrowed in vault};
-    \end{tikzpicture}%
-  }
-  \caption{Origination---externally-sourced direct path. Borrower pledges WETH; the hook chain supplies it to the external venue, borrows USDC, and delivers it. Debt tokens are minted to the vault as creditor; the rate buffer is escrowed. Vault-direct origination omits the external venue---the vault transfers principal directly to the borrower.}
+    \draw[arr] ([xshift=-10pt]B.south) -- node[lab,left]{1.\ WETH} ([xshift=-10pt]CDP.north);
+    \draw[arr] ([xshift=10pt]CDP.north) -- node[lab,right]{4.\ USDC} ([xshift=10pt]B.south);
+    \draw[arr] ([xshift=-10pt]CDP.south) -- node[lab,left]{2.\ supply} ([xshift=-10pt]AV.north);
+    \draw[arr] ([xshift=10pt]AV.north) -- node[lab,right]{3.\ USDC} ([xshift=10pt]CDP.south);
+    \draw[arr] (CDP) -- node[lab,above]{5.\ debt tokens} (V);
+  \end{tikzpicture}
+  \caption{Origination, externally-sourced pipeline. Steps 1--4 execute as a single atomic hook chain. Debt tokens (step~5) are minted to the vault; the rate buffer is escrowed. Vault-funded origination omits the external venue and transfers principal directly.}
   \label{fig:origination}
 \end{figure}
 
 \subsection{Refinancing}
 
-Not every loan runs to its original maturity. A borrower approaching term, or facing changed market conditions, can refinance through the order book rather than repaying and re-borrowing manually.
-
-The borrower posts a refinancing intent specifying the existing loan and desired new terms---extended maturity, adjusted rate, or modified principal. Solvers respond with refinancing quotes; the matching engine treats these identically to origination quotes---same objects, same settlement pipeline. On match, the existing loan is closed and a new loan is originated atomically within the same epoch transition. Collateral remains in the same CDP when the market is unchanged; the borrower experiences a seamless rollover with no intermediate capital movement.
-
-When the Harvest Vault is the creditor on both the old and new loan, the refinancing is a pure accounting event: the vault redeems its debt tokens on the closing loan and receives new debt tokens on the replacement---no external capital moves, no hook chain touches an external venue. This makes vault-funded refinancing operationally trivial and economically costless beyond the rate adjustment.
-
-Refinancing serves three purposes. First, borrowers avoid forced liquidation at maturity---a loan that cannot be repaid at term can be rolled into a new position at current market rates rather than triggering a close event. Second, rates adjust to current conditions---a borrower who originated at 10\% in a high-volatility regime can refinance at 7\% once conditions normalize, without unwinding and re-entering manually. Third, the platform retains AUM that would otherwise exit---refinanced loans stay on the book, preserving vault utilization and solver revenue.
+A borrower refinances by posting a single refinancing intent. The matching engine treats it identically to an origination quote. On match, the existing loan closes and a new one originates atomically within the same epoch. When the Harvest Vault is creditor on both sides, refinancing is a pure accounting event---no capital moves, only terms change. When the creditor differs, repayment and new funding settle within the same settlement tree.
 
 \subsection{Close and Liquidation}
 
-Repayment follows a two-phase process. First, the borrower deposits USDC into the debt token contract, increasing its redeemable reserve. The contract locks redemptions until the next interest accrual is verified---a safety property that prevents creditors from redeeming at a stale price before the protocol fee on outstanding interest is recorded. Second, the vault redeems its debt tokens, receiving USDC proportional to the current claim value (principal plus accrued interest), and routes the USDC to the CDP for variable-rate debt repayment on the external venue.
+On voluntary close, the borrower deposits USDC into the loan's debt contract. After interest accrual is verified (Section~\ref{sec:tokens}), the vault redeems its position and a close hook chain atomically repays the variable debt on the external venue, withdraws the collateral, and returns it to the borrower (with a reverse swap for collateral-swap loans). Any hedging surplus stays in the vault as LP yield. Vault-funded loans skip the external unwind: the borrower repays, and collateral is released directly.
 
-On voluntary close, the platform unwinds the external position atomically via a close hook chain: releases hedging reserves to the CDP, repays the remaining variable debt, withdraws the collateral, and returns it to the borrower. For swap-path loans, the chain includes a reverse swap from the intermediate asset back to the original collateral. Any hedging surplus---the difference between reserved buffers and realized costs---stays in the vault as LP yield. Vault-funded loans skip the external unwind entirely: the borrower repays, the vault redeems debt tokens, and collateral is released from the CDP.
+Liquidation triggers when the health factor drops below~1:
+\begin{equation}
+  \mathit{HF} = \frac{C_{\mathit{value}} \cdot \theta}{D} < 1
+  \label{eq:healthfactor}
+\end{equation}
+where $C_{\mathit{value}}$ is the collateral's current market value, $\theta$ the loan's liquidation threshold (set at origination from the lender's maximum LTV), and $D$ the outstanding debt.
 
-Liquidation spans two epochs. In the first, a proof attesting the liquidatable state is committed as a leaf in the epoch's liquidation root---detection is identity-agnostic, requiring only the mathematical fact that barriers have been breached. In the second, the liquidator identifies itself on-chain, repays the outstanding debt via the debt token contract, and seizes collateral from the CDP at a risk-engine-determined price. Separating detection from seizure ensures that collateral moves only after debt repayment is recorded on-chain.
+Liquidation spans two epochs. In the first, a proof attesting $\mathit{HF} < 1$ is committed as a leaf in the epoch's liquidation root---detection is identity-agnostic, requiring only a proof that barriers have been breached.
+
+In the second, the liquidator identifies itself on-chain, repays outstanding debt $R$ via the debt token contract, and seizes collateral worth $R \cdot (1 + \beta)$ from the CDP, where $\beta$ is the liquidation bonus fixed at origination. Partial liquidation repays the minimum $R$ that restores the health factor above~1; full liquidation repays the entire debt and seizes all remaining collateral. Separating detection from seizure ensures collateral moves only after debt repayment is recorded on-chain.
+
+Because each loan is isolated, bad debt cannot cascade across positions. Any shortfall reduces vault NAV through impaired debt-token value (Section~\ref{sec:lp}).
+
+\begin{figure}[t]
+  \centering
+  \begin{tikzpicture}[
+      box/.style={draw, thick, rounded corners=3pt, fill=gray!8,
+      minimum height=1.1cm, minimum width=2.5cm, align=center, font=\small\sffamily},
+      arr/.style={-{Stealth[length=8pt]}, thick},
+      lab/.style={font=\footnotesize\sffamily, fill=white, inner sep=2pt},
+      sub/.style={font=\small\sffamily\bfseries},
+      chain/.style={font=\footnotesize\sffamily\itshape, text=gray!70}
+    ]
+    % --- Column (a) Originate ---
+    \node[sub] at (-4.3,1) {(a) Originate};
+    \node[chain] at (-4.3,0.5) {Ethereum};
+    \node[box] (a1) at (-4.3,0)    {Borrower};
+    \node[box] (a2) at (-4.3,-1.7) {CDP};
+    \node[box] (a3) at (-4.3,-3.4) {Ext.\ Venue};
+    \node[box] (a4) at (-4.3,-5.1) {CCTP};
+    \draw[arr] (a1) -- node[lab,right]{ETH} (a2);
+    \draw[arr] (a2) -- node[lab,right]{supply} (a3);
+    \draw[arr] (a3) -- node[lab,right]{USDC} (a4);
+
+    % --- Column (b) Active ---
+    \node[sub] at (0,1) {(b) Active};
+    \node[chain] at (0,0.5) {HyperEVM};
+    \node[box] (b1) at (0,0)    {Margin Agent};
+    \node[box] (b2) at (0,-1.7) {HyperCore};
+    \node[box] (b3) at (0,-3.4) {Borrower};
+    \draw[arr] (b1) -- node[lab,right]{deposit} (b2);
+    \draw[arr,dashed] (b3) -- node[lab,right]{trades} (b2);
+
+    % --- Column (c) Close ---
+    \node[sub] at (4.3,1) {(c) Close};
+    \node[chain] at (4.3,0.5) {HyperEVM $\to$ Eth.};
+    \node[box] (c1) at (4.3,0)    {HyperCore};
+    \node[box] (c2) at (4.3,-1.7) {CCTP};
+    \node[box] (c3) at (4.3,-3.4) {Ext.\ Venue};
+    \node[box] (c4) at (4.3,-5.1) {Borrower};
+    \draw[arr] (c1) -- node[lab,right]{USDC} (c2);
+    \draw[arr] (c2) -- node[lab,right]{repay} (c3);
+    \draw[arr] (c3) -- node[lab,right]{ETH} (c4);
+  \end{tikzpicture}
+  \caption{Prime Trade lifecycle. \textbf{(a)}~Borrower pledges ETH; CDP supplies to the external venue; USDC bridged via CCTP. \textbf{(b)}~Margin agent deposits into HyperCore; borrower trades (dashed). \textbf{(c)}~Capital recalled via CCTP; venue repaid; collateral released.}
+  \label{fig:primetrade}
+\end{figure}

@@ -1,50 +1,45 @@
 \section{The Harvest Vault}
 \label{sec:lp}
 
-The Harvest Vault's operator originates loans, responds to lifecycle events, and manages portfolio concentration---all within bounds set by a publicly auditable mandate and enforced per-epoch by a zero-knowledge proof. Passive LPs receive pool-style UX while the operator runs an active order-book lending strategy; the mandate ensures the strategy stays within declared bounds without requiring LPs to trust the operator's discretion.
+The Harvest Vault gives passive LPs pool-style UX while an operator deploys capital into loans under a publicly auditable mandate verified per-epoch by zero-knowledge proof.
 
 \subsection{Operator and Mandate}
 
-The vault operator is the entity that deploys vault capital into loans. The operator participates in the order book as a solver, originating loans on behalf of the vault---either funding principals directly from idle capital or routing through external venues and reserving hedging buffers. The operator also manages active positions: responding to liquidation events, trading debt tokens on the secondary market, and rebalancing portfolio concentration.
-
-The operator's strategy is bounded by a \textbf{mandate}---a policy object committed on-chain as a hash at vault deployment. The mandate specifies:
+The operator's strategy is bounded by a \textbf{mandate}, a policy committed on-chain as a hash at vault deployment. The mandate specifies:
 \begin{itemize}
-  \item \textbf{Allowed collateral set}---asset addresses the operator may accept as loan collateral.
-  \item \textbf{Per-collateral LTV ceiling}---maximum credit multiplier the operator may offer on each collateral type.
-  \item \textbf{Per-tenor rate floor}---minimum annualized rate the operator must charge, ensuring the vault never underwrites below a specified spread.
-  \item \textbf{Portfolio concentration caps}---maximum exposure per borrower, per collateral type, and per market as a fraction of vault NAV.
-  \item \textbf{Liquidation reserve requirement}---minimum idle capital maintained at all times for liquidation response and withdrawal settlement.
+  \item \textbf{Allowed collateral set:} asset addresses the operator may accept as loan collateral.
+  \item \textbf{Per-collateral LTV ceiling:} maximum loan-to-value ratio the operator may offer on each collateral type.
+  \item \textbf{Per-tenor rate floor:} minimum annualized rate the operator must charge, ensuring the vault never underwrites below a specified spread.
+  \item \textbf{Portfolio concentration caps:} maximum exposure per borrower, per collateral type, and per market as a fraction of vault NAV.
+  \item \textbf{Liquidation reserve requirement:} minimum idle capital maintained at all times for liquidation response and withdrawal settlement.
 \end{itemize}
 
-The mandate constrains what the operator \emph{can} do, not what they \emph{must} do. Within the mandate's bounds, the operator retains full discretion on timing, counterparty selection, sourcing path, and position sizing. The full mandate specification is public and auditable; any participant can verify the rules before depositing.
+The mandate constrains what the operator \emph{can} do, not what they \emph{must} do; within its bounds, the operator retains full discretion.
 
 \subsection{Compliance Proof}
 
-Each epoch, the operator produces a zero-knowledge proof attesting that every action taken during that epoch satisfied the mandate. The proof's public inputs are: prior vault state (positions, idle balance, concentration metrics), the set of operator actions in the epoch (originations, redemptions, debt-token trades, liquidation responses, rebalances), and the mandate hash. The output is a \textbf{compliance fact} registered in the same facts registry used by settlement programs (Section~\ref{sec:settlement}):
+Each epoch, the operator produces a zero-knowledge proof that every action satisfied the mandate. The proof takes prior vault state, the epoch's actions, and the mandate hash as public inputs, outputting a \textbf{compliance fact} registered in the facts registry (Section~\ref{sec:settlement}):
 \begin{equation}
-  f_{\mathit{compliance}} = \texttt{keccak256}\!\left(h_{\mathit{prog}},\; \mathit{chainId},\; \mathit{vault},\; \mathit{epoch}_{\mathit{prev}},\; \mathit{epoch}_{\mathit{next}},\; h_{\mathit{mandate}}\right)
+  \begin{split}
+    f_{\mathit{compliance}} &= \khash(h_{\mathit{prog}},\, \mathit{chainId},\, \mathit{vault}, \\
+    &\qquad \mathit{epoch}_{\mathit{prev}},\, \mathit{epoch}_{\mathit{next}},\, h_{\mathit{mandate}})
+  \end{split}
   \label{eq:compliancefact}
 \end{equation}
 where $h_{\mathit{prog}}$ is the compliance program hash, $\mathit{vault}$ is the vault contract address, and $h_{\mathit{mandate}}$ is the committed mandate hash.
 
-An invalid or missing compliance proof does not halt loan settlement---borrowers are unaffected, interest continues to accrue, and liquidations proceed normally. Instead, the operator's fees for that epoch are withheld. This design ensures that LP capital is never frozen by operator failure; the worst case for LPs is that they temporarily receive a higher share of yield (the operator's portion flows back to NAV).
-
 \subsection{Fee-Gating}
 
-The operator earns a spread fee: the difference between the rate charged to borrowers and the blended cost to the vault. On vault-funded loans, the operator's cost is zero (the vault's own capital has no external funding cost), so the spread is the full borrower rate minus the LP yield share. On externally-sourced loans, the spread is the fixed rate charged minus the realized variable rate paid to the external venue.
-
-This fee is escrowed during the epoch. Upon a valid compliance proof, the escrow is released to the operator. Upon an invalid or missing proof, the escrowed fees flow back into the vault as NAV uplift for LPs. LP-facing yield is not contingent on the compliance proof---LPs always receive their share of interest and buffer surplus regardless of operator behavior. Only the operator's cut is at risk. This asymmetry aligns incentives: the operator is rewarded for compliant behavior and penalized for deviation, while LPs face no governance-related yield interruption.
+The operator earns a spread fee escrowed during each epoch. A valid compliance proof releases the escrow to the operator; otherwise it flows back into NAV. An invalid or missing proof does not halt loan settlement or affect borrowers; only the operator's cut is at risk.
 
 \subsection{NAV and Shares}
 
-LPs deposit USDC into the vault and receive ERC-20 shares. The vault's net asset value comprises idle USDC, the claim value of held debt tokens (representing active loan positions), escrowed hedging buffers on externally-sourced loans, and accrued but unredeemed interest---minus USDC ring-fenced for settled withdrawal epochs. The share price reflects NAV per outstanding supply, with a virtual offset against inflation attacks.
-
-Appreciation comes from three sources: full fixed-rate interest on vault-funded loans (the vault earns the borrower's coupon directly), buffer surplus releases on externally-sourced loans when hedging reserves exceed realized costs, and liquidation proceeds. There is no separate insurance fund or loss reserve. Impairments---from borrower defaults reducing debt-token redemption value, buffer exhaustion on external-path loans, or adverse liquidations---reduce the vault's balance directly and are reflected in share price; LPs absorb residual risk through NAV adjustment rather than through a socialized loss pool.
+LPs deposit USDC and receive ERC-20 shares. NAV equals idle USDC plus debt-token claim values plus escrowed hedging buffers plus accrued interest, less USDC ring-fenced for pending withdrawals. Share price is NAV per outstanding supply, with a virtual offset against inflation attacks. Yield comes from fixed-rate interest (vault-funded loans), buffer surplus (externally-sourced loans), and liquidation proceeds. Impairments reduce NAV directly via share-price adjustment.
 
 \subsection{Epoch Withdrawal}
 \label{subsec:withdrawal}
 
-Instant withdrawal is incompatible with capital deployed in active loan positions, per-loan buffer escrows, and transient liquidation bridges. The vault therefore queues exits in a four-step flow:
+Instant withdrawal is incompatible with capital in active positions. The vault queues exits in four steps:
 
 \begin{enumerate}
   \item \textbf{Request.} The LP burns vault shares and receives \emph{withdrawal receipt} tokens for the current epoch.
@@ -53,17 +48,9 @@ Instant withdrawal is incompatible with capital deployed in active loan position
   \item \textbf{Redemption.} The LP burns receipt tokens and receives the ring-fenced USDC, net of a flat redemption fee.
 \end{enumerate}
 
-Until settlement, the LP remains economically exposed to pool gains and losses on the pending stake. The epoch delay is the mechanism that prevents withdrawing at a stale NAV while a loss event is about to land. The vault contract---unlike the core protocol contracts---is non-upgradeable, giving LPs a permanent guarantee that the share accounting, withdrawal flow, and redemption fee logic cannot be altered after deployment.
+Until settlement, the LP remains exposed to pool gains and losses. The epoch delay prevents withdrawing at a stale NAV before a loss lands.
 
-\subsection{Revenue Model}
-
-The borrower's fixed rate decomposes differently depending on the sourcing path:
-
-\textbf{Vault-funded loans.} The vault earns the full fixed rate on deployed principal, minus operator spread fee and protocol fee. Higher yield per loan, 1:1 capital commitment. The portfolio's blended return depends on the operator's skill in selecting credit risk within the mandate's bounds.
-
-\textbf{Externally-sourced loans.} The vault earns buffer surplus---the gap between reserved hedging capital and realized variable-rate cost---plus a share of the lending spread routed through protocol fees. Lower yield per loan, 15--30$\times$ capital leverage.
-
-The portfolio blend depends on vault AUM and market demand. A well-capitalized vault funds more loans directly, capturing higher yield at lower leverage. A capacity-constrained vault relies more on external routing, achieving higher leverage at lower yield per dollar. The operator's mandate and the risk engine's pricing jointly determine the equilibrium.
+\subsection{Risk Decomposition}
 
 \begin{table}[ht]
   \centering
