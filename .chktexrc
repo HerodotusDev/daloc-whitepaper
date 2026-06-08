@@ -1,6 +1,7 @@
 # Suppress warnings that conflict with this project's style.
 #
 #  1 - Command terminated with space.
+#  4 - Italic correction (`\/') — false positive inside \UrlBreaks definition.
 #  8 - Wrong length of dash.
 #  9 - `]' expected, found `)' — half-open intervals [a, b) are intentional.
 # 12 - Interword spacing (`\ ') — false positive after \emph{}, \daloc{}, etc.
@@ -12,6 +13,7 @@
 # 44 - User Regex.
 CmdLine {
   -n1
+  -n4
   -n8
   -n9
   -n12
