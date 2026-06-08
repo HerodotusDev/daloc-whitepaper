@@ -2,16 +2,14 @@
 
 \subsection{Borrow}
 
-Borrow lets a user lock collateral on one chain and receive a fixed-rate, fixed-term loan denominated in a principal asset on another. Rate, fee, and total repayment are quoted upfront and locked for the life of the loan. The pledged collateral stays on its home chain and continues to accrue native yield; no bridging or unstaking is required.
+Borrow lets a user lock collateral on one chain and receive a fixed-rate, fixed-term loan on another. Rate, fee, and total repayment are quoted upfront and locked for the life of the loan. Collateral stays on its home chain and continues accruing native yield---no bridging or unstaking required.
 
 \subsection{Prime Trade}
 
 Prime Trade is \daloc{}'s prime brokerage product: credit origination for holders of yield-bearing assets on Ethereum, Arbitrum, or Base who want perpetual exposure on Hyperliquid~\cite{hyperliquid} without giving up the underlying.
 
-Consider a holder of staked ETH on Arbitrum who wants to trade Hyperliquid perpetuals. The conventional path requires unstaking, bridging, and depositing --- giving up yield and taking on bridging risk. Prime Trade keeps the original asset where it is: the borrower pledges it as collateral, the platform opens a fixed-rate credit line routed to the trading venue, and the pledged asset keeps earning its native yield.
-
-The borrower never holds the borrowed capital. Protocol-controlled margin agents ensure borrowed funds cannot be withdrawn, transferred to spot, or lent --- only perpetual trading is permitted. \daloc{} takes no directional exposure; the platform earns from lending spread and builder fees. Collateral and principal are supported on Ethereum, Arbitrum, Base, and Hyperliquid.
+The conventional path requires unstaking, bridging, and depositing---giving up yield and taking on bridging risk. Prime Trade keeps the collateral where it is: the borrower pledges it and the platform opens a fixed-rate credit line routed directly to the trading venue. The borrower never holds the borrowed capital; protocol-controlled margin agents restrict funds to perpetual trading only---withdrawals, spot transfers, and external lending are blocked. \daloc{} takes no directional exposure; it earns from lending spread and builder fees.
 
 \subsection{Earn}
 
-Earn lets liquidity providers deposit capital into the Harvest Vault, where an operator deploys it into fixed-rate loans originated through the platform's order book. The operator's strategy is bounded by a cryptographically-enforced mandate specifying allowed collateral, LTV ceilings, rate floors, and concentration limits, with compliance verified per-epoch by a zero-knowledge proof. The vault contract is non-upgradeable. Section~\ref{sec:lp} details the mandate, compliance proof, fee-gating, NAV accounting, and withdrawal flow.
+Earn gives liquidity providers passive fixed-rate yield. Capital deposited into the Harvest Vault is deployed into loans by an operator whose strategy is bounded by a publicly auditable mandate, verified per-epoch by zero-knowledge proof (Section~\ref{sec:lp}).

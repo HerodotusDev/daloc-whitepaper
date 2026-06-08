@@ -1,19 +1,19 @@
 \section{Protocol Architecture}
 \label{sec:architecture}
 
-The three products are applications on a shared platform layer. Borrow consumes the order book and settlement pipeline; Prime Trade adds the Hyperliquid custody model; Earn exposes the vault. The layer is extensible: additional products can be built without modifying core contracts.
+All products share a single platform layer, extensible to new products without modifying core contracts.
 
-\subsection{Order Book and RFQ Symmetry}
+\subsection{Order Book}
 
-All loan activity flows through a single order book. Borrower requests and solver quotes are structurally identical objects (collateral, principal, rate, term, execution path), and the matching engine treats both symmetrically. When the book is liquid, a borrower matches immediately; when the book is thin, the request triggers solver quotes matched through the same pipeline.
+All loan activity flows through a single order book. Borrower requests and solver quotes are structurally identical---both specify collateral, principal, rate, term, and execution path---and the matching engine treats them symmetrically. The matcher selects the best rate for the borrower among criteria-compatible quotes; the settlement proof verifies that no better match was skipped.
+
+Participation requires no capital commitment. A borrower or solver signs an off-chain intent and grants a token allowance to the hub, authorizing a future transfer but moving nothing. Capital is transferred only when an epoch's settlement proof executes the match on-chain; until then, funds remain in the participant's wallet.
 
 \subsection{Criteria-Based Matching}
 
-A valid match requires both price compatibility and criteria satisfaction. Criteria are typed attributes attached to an intent --- counterparty allowlists, jurisdictional restrictions, KYC-tier requirements, or sanctions-screen attestations. The matcher treats a pair as compatible only if each side's criteria are satisfied by the other's attributes. There is no separate permissioned market; there is one order book whose entries vary in how restrictive they are.
+Beyond price compatibility, a match must satisfy \emph{criteria}: typed attributes attached to an intent --- counterparty allowlists, jurisdictional restrictions, KYC-tier requirements, or sanctions-screen attestations. The matcher treats a pair as compatible only if each side's criteria are satisfied by the other's attributes. There is no separate permissioned market; entries in one order book vary only in how restrictive they are.
 
-Criteria originate from three sources. \textbf{Self-asserted criteria} are declared by the entry's author (e.g.\ ``fill only against counterparties carrying attestation~$X$ from issuer~$Y$''). \textbf{Counterparty attributes} are sourced from on-chain attestations or signed claims. \textbf{Market-level criteria} are embedded in the market's program hashes; a restricted market shares all platform infrastructure with unrestricted ones.
-
-Given entries $a$ and $b$, the matching program checks that every criterion in $a.\mathit{requires}$ is satisfied by $b.\mathit{attributes}$ and vice versa. Criteria can be public or committed-only (stored as a hash; the predicate evaluates inside the proof, revealing only the boolean outcome). The default is open: unrestricted intents match against anyone.
+Criteria originate from three sources: the intent author (self-asserted), on-chain attestations or signed claims (counterparty attributes), and the market's program hashes (market-level). Criteria can be committed-only --- stored as a hash, evaluated inside the proof, revealing only the boolean outcome. The default is open: unrestricted intents match against anyone.
 
 \subsection{Markets}
 
@@ -29,27 +29,20 @@ where $c$ is the collateral asset, $\mathit{chainId}_p$ the principal chain, $p$
 
 Markets are created permissionlessly through the \emph{hub} contract (DalocHub). The hub is the sole token rail: all user-facing ERC-20 transfers route through it, creating a single authorization point for capital flows, intent cancellations, and global pause.
 
-Different markets can encode fundamentally different collateral strategies: a \emph{classical} market locks collateral as a liquidation hedge, while a more aggressive market can permit managed rehypothecation through its programs. The choice is a market-definition decision, not a protocol-level toggle.
+Different markets can encode different collateral strategies: a \emph{classical} market locks collateral as a liquidation hedge, while a more aggressive market can permit managed rehypothecation. The choice is a market-definition decision, not a protocol-level toggle.
 
-Deploying a market instantiates two market-level contracts (\emph{collateral manager issuer} on the collateral chain, \emph{debt issuer} on the principal chain), and each funded loan creates two per-loan contracts (\emph{collateral manager} and \emph{issued debt} token). All are deployed at deterministic \texttt{CREATE2} addresses. Section~\ref{sec:settlement} details the contract roles, settlement programs, and epoch mechanics.
-
-\subsection{Positions}
+Each market deploys issuer contracts on both the collateral and principal chains; each funded loan creates per-loan contracts at deterministic \texttt{CREATE2} addresses. Per-loan contracts are isolated---one per loan, not shared across borrowers---so one position's risk cannot cascade to another.
 \label{sec:positions}
-
-Each loan's per-loan contracts (collateral manager and issued debt) are isolated: one per loan, not shared across borrowers. There is no shared margin account, and one position's risk cannot cascade to another.
-
-\daloc{} preserves per-loan isolation at the contract level while enabling cross-margin efficiency at a higher abstraction layer. A cross-margining layer, implemented through the market's zero-knowledge programs, can recognize offsetting positions across a borrower's active loans for reduced buffer sizing or increased borrowing capacity, without compromising isolation: each collateral manager remains independently liquidatable.
+Section~\ref{sec:settlement} details the contract hierarchy, settlement programs, and epoch mechanics.
 
 \subsection{Hook Composition}
 
-Lending operations are expressed as atomic hook chains attached to settlement events. Each transfer in the settlement tree carries optional \emph{pre-hooks} and \emph{post-hooks}: pre-hooks execute before the transfer (e.g.\ deploy a CDP), the transfer moves collateral or principal, and post-hooks execute after (e.g.\ supply to an external venue, borrow, bridge). All steps must succeed or the entire operation reverts; there is no partial origination or partial unwind.
+Lending operations are expressed as atomic hook chains attached to settlement events. Each transfer in the settlement tree carries optional \emph{pre-hooks} and \emph{post-hooks}: pre-hooks execute before the transfer (e.g.\ deploy a CDP), the transfer moves collateral or principal, and post-hooks execute after (e.g.\ supply to an external venue, borrow, bridge). All steps must succeed or the entire operation reverts.
 
-Each hook is a self-contained operation assembled by the solver and committed into the settlement tree before on-chain execution. Borrowers sign high-level intents; solvers compete to attach the cheapest valid execution plan. Section~\ref{sec:lifecycle} details the five origination pipelines built from hook chains.
-
-Intent cancellation is always available (even when the protocol is paused) and takes effect at the next epoch boundary.
+Each hook is assembled by the solver and committed into the settlement tree before on-chain execution. A hook's permitted operations are constrained by the market's ZK programs: the settlement proof verifies that every hook is authorized and that the resulting state satisfies the market's invariants. Borrowers sign high-level intents; solvers compete to attach the cheapest valid execution plan. Intent cancellation is always available (even when the protocol is paused) and takes effect at the next epoch boundary.
 
 \subsection{Solvers}
 
-The Harvest Vault operator is the platform's canonical solver, participating in the order book like any other solver: responding to borrower requests with quotes, assembling hook chains, and committing them into settlement trees.
+The Harvest Vault operator is the canonical solver, participating in the order book like any other.
 
-Independent solvers coexist on the same order book. A \emph{risk-taking} solver supplies the borrow from its own balance sheet; a \emph{passive} solver routes through existing money-market liquidity (Aave~\cite{aave2026}, Morpho~\cite{morphoblue2023}, Spark~\cite{spark2023}) by deploying pledged collateral on established lending venues. Both modes produce structurally identical entries; the best terms win. Position contracts are asset-agnostic --- routing and capital allocation are solver-level concerns, making the platform extensible to new venues without modifying core contracts.
+Independent solvers coexist on the same book. A \emph{risk-taking} solver funds from its own balance sheet; a \emph{passive} solver routes through existing money-market liquidity (Aave~\cite{aave2026}, Morpho~\cite{morphoblue2023}, Spark~\cite{spark2023}) by deploying pledged collateral on established venues. Both modes produce structurally identical entries; the best terms win. Routing and capital sourcing are solver-level concerns, making the platform extensible to new venues without core contract changes.

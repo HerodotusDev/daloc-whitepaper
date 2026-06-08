@@ -1,24 +1,14 @@
 \section{Capital Management}
 
-The vault funds each loan through one of two capital paths, each with distinct leverage, yield, and risk characteristics.
+The origination pipelines (Section~\ref{sec:lifecycle}) differ fundamentally in how much capital the vault must commit.
 
 \subsection{Vault-Funded Path}
 
-When the vault funds directly, there is no variable-rate leg and no hedging buffers; the vault bears fixed-rate exposure at 1:1 capital commitment. Yield per loan is higher than the externally-sourced path, but capital leverage is lower. The operator's mandate (Section~\ref{sec:lp}) determines the portfolio mix.
+The vault commits principal at 1:1. No variable-rate leg, no hedging buffers. Yield per loan is higher but capital leverage is lower.
 
 \subsection{Externally-Sourced Path}
 
-On the externally-sourced path, the pledged collateral does double duty: it simultaneously secures the \daloc{} loan and serves as collateral on the external venue. The vault commits 3--7\% of principal as hedging reserves (rate buffer plus option buffer), achieving capital leverage of 15--30$\times$. External venues are suppliers, not competitors: the platform aggregates their liquidity without competing for deposits.
-
-\subsection{Capital Efficiency}
-
-Both buffers are sized automatically by the risk engine at quote time: the rate buffer from the tail of simulated variable-rate paths, the option buffer from simulated round-trip swap execution against on-chain pool depth.
-
-Consider two scenarios for a \$500,000 loan backed by WETH collateral at a 70\% credit multiplier:
-
-\textbf{Vault-funded.} The vault transfers \$350,000 USDC directly to the borrower. Capital committed: \$350,000 at 1:1. The vault earns the full 8\% fixed rate on that principal, approximately \$6,900 over a 90-day term.
-
-\textbf{Externally-sourced.} The external venue supplies the \$350,000 principal. The vault reserves \$17,500 as a rate buffer (5\% of principal), approximately \textbf{20:1 capital leverage}. The vault earns the buffer surplus: the difference between the reserved \$17,500 and the realized variable-rate cost, typically \$3,000--\$8,000 over a 90-day term.
+The vault commits only 3--7\% of principal as hedging reserves (rate buffer plus option buffer), achieving 15--30$\times$ capital leverage. Pledged collateral simultaneously secures the \daloc{} loan and the external venue position. External venues are suppliers, not competitors: the platform aggregates their liquidity rather than competing for deposits.
 
 \begin{figure}[ht]
   \centering
@@ -50,6 +40,14 @@ Consider two scenarios for a \$500,000 loan backed by WETH collateral at a 70\% 
   \label{fig:capital}
 \end{figure}
 
-\subsection{Buffer Economics}
+\subsection{Capital Efficiency}
 
-At close, if the realized variable-rate cost stayed below the rate buffer reservation (the common case), the surplus remains in the vault as LP yield. If it exceeded the reservation, the shortfall reduces vault NAV. The same logic applies to the option buffer: on roughly 95\% of swapped-collateral loans the hedge expires unused; on the remainder, it covers realized slippage up to its maximum.
+The risk engine sizes both buffers at quote time: the rate buffer from tail simulations of variable-rate paths, the option buffer from simulated round-trip swap execution against on-chain pool depth.
+
+Consider two scenarios for a \$500,000 loan backed by WETH collateral at 70\% LTV:
+
+\textbf{Vault-funded.} The vault transfers \$350,000 USDC directly to the borrower. Capital committed: \$350,000 at 1:1. The vault earns the full 8\% fixed rate on that principal, approximately \$6,900 over a 90-day term.
+
+\textbf{Externally-sourced.} The external venue supplies the \$350,000 principal. The vault reserves \$17,500 as a rate buffer (5\% of principal), approximately \textbf{20:1 capital leverage}. The vault earns the buffer surplus: the difference between the reserved \$17,500 and the realized variable-rate cost, typically \$3,000--\$8,000 over a 90-day term.
+
+At close, buffer surplus remains in the vault as LP yield; buffer shortfall reduces vault NAV.
