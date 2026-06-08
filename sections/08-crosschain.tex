@@ -1,70 +1,64 @@
 \section{Cross-Chain Exposure}
 \label{sec:crosschain}
 
-The protocol treats cross-chain operation as the default case---a same-chain loan is the degenerate instance where collateral and principal chains happen to coincide. Cross-chain loans involve two kinds of operations at different layers.
+The protocol treats cross-chain operation as the default case; a same-chain loan is the degenerate instance where collateral and principal chains coincide. Cross-chain loans involve two kinds of operations at different layers.
 
-\textbf{Authorization} is a protocol-level concern: proving that the borrower actually pledged collateral on the collateral chain so the principal chain's contracts can act on it. \daloc{} handles authorization with ZK storage proofs via the Herodotus Data Processor (HDP). HDP produces verifiable execution traces that combine storage proofs over historical state with MMR-backed chain history verification across EVM chains and Starknet. A single proof can read the borrower's collateral balance on the collateral chain, the CDP's position on the external lending venue, and the venue's current utilization---composing cross-chain and cross-protocol state reads into one verifiable claim.
+\textbf{Authorization} is a protocol-level concern: proving that the borrower actually pledged collateral on the collateral chain so the principal chain's contracts can act on it. \daloc{} handles authorization with ZK storage proofs via the Herodotus Data Processor (HDP)~\cite{hdp}. HDP produces verifiable execution traces combining storage proofs over historical state with MMR-backed chain history verification across EVM chains and Starknet, composing cross-chain and cross-protocol state reads into one verifiable claim.
 
-\textbf{Token movement} is a solver-level concern: physically moving the borrowed asset to its destination chain. The protocol does not move funds---solvers do, as the execution side of fulfilling a borrower's request. Solvers choose the path; for USDC, Circle's Cross-Chain Transfer Protocol (CCTP) is the common choice. Bridge hooks compose token movement into the same atomic hook chain as the rest of the origination pipeline. The two layers are independent.
+\textbf{Token movement} is a solver-level concern: physically moving the borrowed asset to its destination chain. Solvers choose the path; for USDC, Circle's Cross-Chain Transfer Protocol (CCTP) is the common choice. Bridge hooks compose token movement into the same atomic hook chain as the rest of the origination pipeline.
 
 \subsection{Deterministic Addressing}
 
-The hub contract deploys at the same address on every supported chain, so markets, allowances, and registry lookups align. Per-loan CDPs and debt tokens are deployed at deterministic addresses derived from the hub and the loan identifier---the platform computes addresses at quote time, hours before on-chain deployment. Matching and risk run off-chain; each chain advances epochs with its own five Merkle roots and epoch sequence, verified locally via Merkle inclusion proofs.
+The hub deploys at the same address on every supported chain, so markets and registry lookups align across chains. A loan can lock collateral on chain~A while the issued debt token lives on chain~B, coordinated via shared epoch commitments and deterministic \texttt{CREATE2} address derivation. New destinations require only new bridge adapters whitelisted on the hub.
 
-A loan can lock collateral on chain~A while the debt token and lender claims live on chain~B---coordinated via shared epoch commitments and cross-chain address derivation. New destinations require only new bridge adapters and receiver contracts whitelisted on the hub; the origination pattern is not venue-specific.
+\subsection{Hyperliquid Margin Agent}
 
-\subsection{Hyperliquid Pipeline}
+The Hyperliquid margin origination pipeline (Section~\ref{sec:lifecycle}) routes borrowed USDC via CCTP to a per-loan \emph{margin agent} on HyperEVM whose address was computed at quote time via \texttt{CREATE2}. CCTP attesters and relayers mint USDC to the margin agent, which deposits it into HyperCore as margin in its own per-position account; capital never enters the borrower's personal wallet. The margin agent restricts actions to perpetual trading only, blocking withdrawals, spot transfers, and external lending.
 
-When a borrower accepts a margin-path quote, the Ethereum leg settles atomically through a hook chain: epoch roots are posted, the per-loan CDP is deployed, and hooks execute---deposit collateral, source USDC (either directly from the vault or by supplying collateral to an external venue and borrowing), and bridge. Instead of transferring USDC to the borrower, a bridge hook burns the USDC via CCTP, with the destination set to a per-loan \emph{margin agent} on HyperEVM whose address was computed at quote time via \texttt{CREATE2}.
-
-CCTP attesters and relayers mint USDC to the margin agent on HyperEVM. The margin agent deposits the USDC into HyperCore as margin in its own per-position account---the capital never enters the borrower's personal wallet. The borrower selects perpetual positions through the platform's interface; the margin agent constrains executable actions to perpetual trading only, blocking withdrawals, spot transfers, and external lending.
-
-Close or liquidation on a margin loan first recalls capital from Hyperliquid, then unwinds the Ethereum leg. The margin agent transfers funds from the perp account to spot, withdraws to HyperEVM, burns via CCTP back to a receiver contract on Ethereum that forwards USDC to the CDP. Only then does the standard close hook chain run---repay the external venue, release collateral, settle buffers. Collateral never crosses to HyperEVM; only USDC round-trips while collateral stays on Ethereum.
+Close or liquidation first recalls capital: the margin agent transfers funds from the perp account to spot, withdraws to HyperEVM, and burns via CCTP back to a receiver contract on Ethereum that forwards USDC to the CDP. Collateral never crosses to HyperEVM; only USDC round-trips.
 
 \begin{figure}[ht]
   \centering
-  \resizebox{\textwidth}{!}{%
-    \begin{tikzpicture}[
-        panel/.style={draw, dashed, rounded corners=4pt, inner sep=8pt},
-        box/.style={draw, rounded corners=2pt, minimum height=0.8cm, minimum width=1.6cm,
-        align=center, font=\scriptsize\sffamily},
-        arr/.style={-{Stealth[length=5pt]}, semithick},
-        lab/.style={font=\tiny\sffamily, fill=white, inner sep=1pt},
-        title/.style={font=\small\sffamily\bfseries, anchor=north west}
-      ]
-      % Panel (a)
-      \node[panel, minimum width=4.4cm, minimum height=3.2cm] (pa) at (0,0) {};
-      \node[title] at (pa.north west) {(a) Originate};
-      \node[box] (a1) at (-1.2,0.4) {Borrower};
-      \node[box] (a2) at (1.2,0.4) {CDP};
-      \node[box] (a3) at (1.2,-0.8) {Ext.\ Venue};
-      \node[box] (a4) at (-1.2,-0.8) {CCTP};
-      \draw[arr] (a1) -- node[lab,above]{ETH} (a2);
-      \draw[arr] (a2) -- node[lab,right]{supply} (a3);
-      \draw[arr] (a3) -- node[lab,below]{USDC} (a4);
+  \begin{tikzpicture}[
+      box/.style={draw, thick, rounded corners=3pt, fill=gray!8,
+      minimum height=1.1cm, minimum width=2.5cm, align=center, font=\small\sffamily},
+      arr/.style={-{Stealth[length=8pt]}, thick},
+      lab/.style={font=\footnotesize\sffamily, fill=white, inner sep=2pt},
+      sub/.style={font=\small\sffamily\bfseries},
+      chain/.style={font=\footnotesize\sffamily\itshape, text=gray!70}
+    ]
+    % --- Column (a) Originate ---
+    \node[sub] at (-4.3,1) {(a) Originate};
+    \node[chain] at (-4.3,0.5) {Ethereum};
+    \node[box] (a1) at (-4.3,0)    {Borrower};
+    \node[box] (a2) at (-4.3,-1.7) {CDP};
+    \node[box] (a3) at (-4.3,-3.4) {Ext.\ Venue};
+    \node[box] (a4) at (-4.3,-5.1) {CCTP};
+    \draw[arr] (a1) -- node[lab,right]{ETH} (a2);
+    \draw[arr] (a2) -- node[lab,right]{supply} (a3);
+    \draw[arr] (a3) -- node[lab,right]{USDC} (a4);
 
-      % Panel (b)
-      \node[panel, minimum width=4.4cm, minimum height=3.2cm] (pb) at (5.4,0) {};
-      \node[title] at (pb.north west) {(b) Active};
-      \node[box] (b1) at (4.2,0.4) {MarginAgent};
-      \node[box] (b2) at (6.6,0.4) {HyperCore};
-      \node[box] (b3) at (6.6,-0.8) {Borrower};
-      \draw[arr] (b1) -- node[lab,above]{deposit} (b2);
-      \draw[arr, dashed] (b3) -- node[lab,right]{trades} (b2);
+    % --- Column (b) Active ---
+    \node[sub] at (0,1) {(b) Active};
+    \node[chain] at (0,0.5) {HyperEVM};
+    \node[box] (b1) at (0,0)    {Margin Agent};
+    \node[box] (b2) at (0,-1.7) {HyperCore};
+    \node[box] (b3) at (0,-3.4) {Borrower};
+    \draw[arr] (b1) -- node[lab,right]{deposit} (b2);
+    \draw[arr,dashed] (b3) -- node[lab,right]{trades} (b2);
 
-      % Panel (c)
-      \node[panel, minimum width=4.4cm, minimum height=3.2cm] (pc) at (10.8,0) {};
-      \node[title] at (pc.north west) {(c) Close};
-      \node[box] (c1) at (9.6,0.4) {HyperCore};
-      \node[box] (c2) at (12,0.4) {CCTP};
-      \node[box] (c3) at (12,-0.8) {Ext.\ Venue};
-      \node[box] (c4) at (9.6,-0.8) {Borrower};
-      \draw[arr] (c1) -- node[lab,above]{USDC} (c2);
-      \draw[arr] (c2) -- node[lab,right]{repay} (c3);
-      \draw[arr] (c3) -- node[lab,below]{ETH} (c4);
-    \end{tikzpicture}%
-  }
-  \caption{Prime Trade lifecycle. \textbf{(a)}~Hook chain: borrower pledges collateral; CDP supplies to external venue and borrows USDC; bridge hook sends principal via CCTP to HyperEVM. \textbf{(b)}~Margin agent deposits USDC into HyperCore; borrower directs perpetual trades via the platform interface (dashed). \textbf{(c)}~Capital recalled via CCTP; external venue repaid; collateral released.}
+    % --- Column (c) Close ---
+    \node[sub] at (4.3,1) {(c) Close};
+    \node[chain] at (4.3,0.5) {HyperEVM $\to$ Eth.};
+    \node[box] (c1) at (4.3,0)    {HyperCore};
+    \node[box] (c2) at (4.3,-1.7) {CCTP};
+    \node[box] (c3) at (4.3,-3.4) {Ext.\ Venue};
+    \node[box] (c4) at (4.3,-5.1) {Borrower};
+    \draw[arr] (c1) -- node[lab,right]{USDC} (c2);
+    \draw[arr] (c2) -- node[lab,right]{repay} (c3);
+    \draw[arr] (c3) -- node[lab,right]{ETH} (c4);
+  \end{tikzpicture}
+  \caption{Prime Trade lifecycle. \textbf{(a)}~Borrower pledges ETH; CDP supplies to the external venue; USDC bridged via CCTP. \textbf{(b)}~Margin agent deposits into HyperCore; borrower trades (dashed). \textbf{(c)}~Capital recalled via CCTP; venue repaid; collateral released.}
   \label{fig:primetrade}
 \end{figure}
 
@@ -72,4 +66,4 @@ Close or liquidation on a margin loan first recalls capital from Hyperliquid, th
 
 From the lender's perspective, every current loan is fully collateralized on Ethereum: pledged assets in the external venue back the variable debt and the vault's claim. From the borrower's perspective, the position is under-collateralized relative to venue exposure.
 
-Consider a borrower who deposits 40~ETH (worth \$80{,}000 at \$2{,}000/ETH). The CDP supplies the ETH to the external venue and borrows \$50{,}000 USDC at a 62.5\% borrow ratio. The \$50{,}000 is bridged to a protocol-controlled margin agent on Hyperliquid, where it serves as margin for perpetual positions at up to 5$\times$ leverage---controlling \$250{,}000 of notional exposure. The borrower's \$80{,}000 of collateral backs \$250{,}000 of venue exposure: a 3.1$\times$ effective leverage that would be impossible without selling the underlying ETH.
+Consider a borrower who deposits 40~ETH (\$80{,}000 at \$2{,}000/ETH). The CDP supplies the ETH to the external venue and borrows \$50{,}000 USDC at a 62.5\% borrow ratio. That \$50{,}000 is bridged to a protocol-controlled margin agent on Hyperliquid, where it serves as margin for perpetual positions at up to 5$\times$ leverage, controlling \$250{,}000 notional. The borrower's \$80{,}000 of collateral backs \$250{,}000 of venue exposure --- 3.1$\times$ effective leverage that would be impossible without selling the underlying ETH.
