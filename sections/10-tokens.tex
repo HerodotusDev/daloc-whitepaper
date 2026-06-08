@@ -1,6 +1,8 @@
 \section{Position Tokens and Secondary Markets}
 \label{sec:tokens}
 
+Each funded loan produces a tokenized position representing the lender's claim. These tokens carry accrual, enforce solvency rules, and trade on secondary markets.
+
 \subsection{Debt Tokens}
 
 Each funded loan issues a transferable ERC-20 whose face value is one unit of the principal asset per token. The token is the lender's economic position. The claim value per token $v$ (the amount redeemable at maturity) is:
@@ -13,22 +15,21 @@ where $I_{\mathrm{cum}}$ is the cumulative interest accrued per token, rising as
   \Delta I = D \cdot r \cdot \frac{\Delta t}{T_{\mathrm{year}}}
   \label{eq:interest}
 \end{equation}
-where $D$ is the outstanding debt in token units, $r$ the annualized rate, $\Delta t$ the accrual period in seconds, and $T_{\mathrm{year}} = 365.25 \times 86{,}400$. Each accrual requires a valid interest fact (Equation~\ref{eq:intfact}) attesting the computed amount. When borrowers repay, cash enters a principal reserve; a subsequent accrual step, backed by a proof tied to the market's rate program, reclassifies the interest portion: \textbf{20\%} to the protocol and \textbf{80\%} into the per-token index and an interest reserve backing redemptions. Holders who redeem burn tokens and receive principal (1:1 face value) plus their share of the interest index.
+where $D$ is the outstanding debt in token units, $r$ the annualized rate, $\Delta t$ the accrual period in seconds, and $T_{\mathrm{year}} = 365.25 \times 86{,}400$. Each accrual requires a valid interest fact (Equation~\ref{eq:intfact}) attesting the computed amount.
 
-The contract maintains a strict accounting identity: every unit of principal is partitioned into a redeemable reserve, an interest reserve, and protocol fees, whose sum equals the contract's token balance at all times. Two rules protect solvency. \emph{Redemption lock:} after new cash enters, redemptions are blocked until interest for that period is accrued, preventing exits at the pre-fee index. \emph{Close:} a loan can be marked closed only when accrual is current and the principal reserve covers all outstanding tokens.
+Repayment proceeds enter a principal reserve. A subsequent accrual step, backed by a proof tied to the market's rate program, splits the interest portion into a protocol fee and an interest reserve. Holders redeem by burning tokens and receiving principal plus their share of the interest index.
 
-Debt tokens from markets with criteria-based restrictions carry transfer-time criteria (e.g.\ ``KYC tier~$\geq$~2'') enforced by the debt issuer at the hub-routed transfer step, ensuring restrictions persist after origination. When the Harvest Vault is the creditor, vault shares (Section~\ref{sec:lp}) reflect the aggregate claim value across all held debt tokens.
+The contract maintains a strict accounting identity:
+\begin{equation}
+  R_{\mathit{principal}} + R_{\mathit{interest}} + F_{\mathit{protocol}} = B_{\mathit{token}}
+  \label{eq:accounting}
+\end{equation}
+where $R_{\mathit{principal}}$ is the redeemable principal reserve, $R_{\mathit{interest}}$ the interest reserve, $F_{\mathit{protocol}}$ the accrued protocol fees, and $B_{\mathit{token}}$ the contract's token balance. Two rules protect solvency. First, redemptions are blocked until interest for the latest period is accrued, preventing exits at a stale index. Second, a loan can be marked closed only when accrual is current and the principal reserve covers all outstanding tokens.
+
+Debt tokens from criteria-restricted markets carry transfer-time criteria (e.g.\ ``KYC tier~$\geq$~2'') enforced at the hub-routed transfer step, ensuring restrictions persist after origination. When the Harvest Vault is creditor, vault shares (Section~\ref{sec:lp}) reflect the aggregate claim value across all held debt tokens.
 
 \subsection{Secondary Markets}
 
-A lender who needs liquidity before maturity cannot ask the borrower to repay; the secondary market is the exit. Debt tokens are standard ERC-20, so creditors can sell loan exposure on any secondary venue without protocol modification.
+A lender who needs liquidity before maturity sells on secondary markets. Debt tokens are standard ERC-20, tradeable on any venue without protocol modification.
 
-\textbf{Credit-risk price discovery.} Two loans with identical face value can trade at different prices because the market disagrees on default probability. The price difference is the on-chain analog of a credit spread, a signal that pool-based lending cannot produce because every position in the pool earns the same rate.
-
-\textbf{Yield curve construction.} Debt tokens of different tenors against the same collateral, trading simultaneously, produce an observable term structure for duration-matched strategies and structured credit.
-
-Each loan produces its own token~\cite{midnight2025}, enabling granular risk transfer with distinct interest accumulators and reserve pairs.
-
-\subsection{Liquidity Bootstrap}
-
-The platform bootstraps secondary liquidity through a protocol-funded auto-bidder, posting standing bids at a spread above model-implied fair value for each live debt token, funded from a capped Harvest Vault allocation. Bid depth and fill rate are published per epoch. Once third-party fill rate exceeds a threshold for consecutive epochs, the allocation shrinks to zero.
+\textbf{Credit-risk price discovery.} Two loans with identical face value can trade at different prices reflecting divergent default expectations --- the on-chain analog of a credit spread. Pool-based lending cannot produce this signal because every position earns the same rate. Each loan's distinct token~\cite{midnight2025} enables granular risk transfer.
