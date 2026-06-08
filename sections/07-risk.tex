@@ -1,8 +1,11 @@
 \section{Risk Quantification}
+\label{sec:risk}
+
+The preceding sections defined the risk channels (Table~\ref{tab:risk}); this section describes how the risk engine sizes each loan's parameters before capital is deployed.
 
 \subsection{Dynamic Underwriting}
 
-Every loan quote must bound the lender's loss before capital is deployed. The risk engine evaluates each collateral asset dynamically, deciding whether to accept it, reject it, or accept it with adjusted parameters, and continuously re-evaluates existing positions. Inputs include liquidity conditions (depth and slippage at trade size), non-quantitative dimensions (smart contract, issuer, and infrastructure risk), and venue conditions for Prime Trade. Maximum borrow, fixed rate, and liquidation diagnostics are \emph{outputs of the model}, not static protocol parameters.
+Every loan quote must bound the lender's loss before capital is deployed. The risk engine evaluates each collateral asset dynamically --- accepting, rejecting, or adjusting parameters --- and continuously re-evaluates existing positions. Inputs include liquidity conditions (depth and slippage at trade size), non-quantitative dimensions (smart contract, issuer, and infrastructure risk), and venue conditions for Prime Trade. Maximum borrow, fixed rate, and liquidation thresholds are \emph{outputs of the model}, not static protocol parameters.
 
 \subsection{Methodology}
 
@@ -10,14 +13,24 @@ The risk engine follows a three-stage pipeline: data collection, statistical mod
 
 \textbf{Data collection.} The engine ingests live on-chain state (asset prices, lending-venue utilization rates, liquidity-pool depth, and historical return series) directly from the chains where collateral and principal reside.
 
-\textbf{Statistical modeling.} Collected data feeds statistical models that estimate the current volatility regime, tail-risk characteristics, and correlation structure of the collateral asset. The models capture asymmetric behavior (downside moves weigh more than equivalent upside moves) and discontinuous price events that continuous models would understate.
+\textbf{Statistical modeling.} Collected data feeds models that estimate the current volatility regime, tail-risk characteristics, and correlation structure, capturing asymmetric downside behavior and discontinuous price events.
 
-\textbf{Simulation.} Monte Carlo simulations project collateral prices and variable-rate funding costs over the loan horizon under the estimated regime. Simulated paths are evaluated against the loan's liquidation barriers and actual liquidation mechanics (partial versus full close, bonuses, route slippage), so pricing reflects path-dependent recovery. The output --- a joint distribution of liquidation probability and loss given default --- feeds directly into the pricing module.
+\textbf{Simulation.} Monte Carlo simulations project collateral prices and variable-rate funding costs over the loan horizon. Simulated paths are evaluated against the loan's liquidation barriers and mechanics (partial versus full close, bonuses, slippage), producing a distribution of liquidation probability and loss given default.
 
 \subsection{Pricing}
 
-The published credit multiplier and rate are chosen jointly to balance the lender's expected return, position economics, and incremental tail risk when the new loan sits beside existing positions.
+The published LTV and rate are chosen jointly to balance expected return and incremental tail risk given the existing book.
 
-Higher volatility or longer duration lowers the credit multiplier; adding correlated exposure to a concentrated book raises the rate. Positions that reduce aggregate tail risk receive more favorable terms, naturally incentivizing diversification. The rate never falls below the risk-free return plus the simulated expected loss per dollar lent. With principal $L$, annualized rate $r$, and horizon $T$ in years, debt at maturity is $D = L(1 + rT)$, linking the quoted rate directly to the liquidation barrier and simulated loss distribution.
+Higher volatility or longer duration lowers the LTV; adding correlated exposure to a concentrated book raises the rate. Positions that reduce aggregate tail risk receive more favorable terms, incentivizing diversification. The rate never falls below the risk-free return plus the simulated expected loss per dollar lent. With collateral quantity $C$, spot price $S_0$, LTV ratio $\lambda$, and origination fee $\phi$, the maximum borrow is:
+\begin{equation}
+  L = C \cdot S_0 \cdot \lambda \cdot (1 - \phi)
+  \label{eq:maxborrow}
+\end{equation}
+With annualized rate $r$ and horizon $T$ in years, debt at maturity is $D = L(1 + rT)$. The liquidation barrier --- the spot price at which the health factor (Equation~\ref{eq:healthfactor}) breaches~1 --- is:
+\begin{equation}
+  S_{\mathit{liq}} = \frac{D}{C \cdot \theta}
+  \label{eq:liqbarrier}
+\end{equation}
+where $\theta$ is the liquidation threshold. The simulated probability that the collateral price path reaches $S_{\mathit{liq}}$ over the loan's horizon feeds directly into the quoted rate.
 
-For externally-sourced loans, the rate buffer is sized separately from the borrower's fixed rate, covering the tail of simulated variable-rate paths on the external venue. The borrower's obligation remains the simple linear formula above regardless of the sourcing path.
+For externally-sourced loans, the rate buffer is sized separately, covering the tail of simulated variable-rate paths on the external venue. The borrower's obligation remains the linear formula above regardless of sourcing path.
