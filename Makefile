@@ -1,31 +1,32 @@
-TEX    = pdflatex
-BIB    = bibtex
-NAME   = daloc-whitepaper
-FLAGS  = -interaction=nonstopmode -halt-on-error
+NAME = daloc-whitepaper
+SRCS = $(NAME).tex preamble.tex $(wildcard sections/*.tex)
+LOG  = $(NAME).mklog
 
-SRCS   = $(NAME).tex preamble.tex $(wildcard sections/*.tex)
+.PHONY: all build watch fmt lint check clean rebuild
 
-.PHONY: all build fmt lint check clean
+all: build
 
-all: $(NAME).pdf
+build:
+	@latexmk -silent $(NAME) > $(LOG) 2>&1 || { cat $(LOG); rm -f $(LOG); exit 1; }
+	@rm -f $(LOG)
 
-$(NAME).pdf: $(SRCS) references.bib
-	$(TEX) $(FLAGS) $(NAME)
-	$(BIB) $(NAME)
-	$(TEX) $(FLAGS) $(NAME)
-	$(TEX) $(FLAGS) $(NAME)
+watch:
+	@latexmk -pvc $(NAME)
 
-build: clean all
+rebuild:
+	@$(MAKE) --no-print-directory clean
+	@$(MAKE) --no-print-directory build
 
 fmt:
-	tex-fmt --nowrap $(SRCS)
+	@tex-fmt --nowrap $(SRCS)
 
 lint:
-	chktex -q -l .chktexrc $(SRCS)
+	@chktex -q -l .chktexrc $(SRCS)
 
-check: lint
-	@$(MAKE) --no-print-directory all
+check:
+	@$(MAKE) --no-print-directory lint
+	@$(MAKE) --no-print-directory build
 	@echo "Build OK."
 
 clean:
-	rm -f $(NAME).{aux,bbl,blg,log,out,toc,pdf,nav,snm,vrb}
+	@latexmk -silent -C $(NAME) > /dev/null 2>&1; rm -f $(NAME).bbl $(NAME).run.xml $(LOG)
