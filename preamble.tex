@@ -18,6 +18,14 @@
 
 % --- Math ---
 \usepackage{amsmath,amssymb}
+\allowdisplaybreaks[1]
+\setlength{\abovedisplayskip}{10pt plus 3pt minus 4pt}
+\setlength{\belowdisplayskip}{10pt plus 3pt minus 4pt}
+\setlength{\abovedisplayshortskip}{4pt plus 3pt}
+\setlength{\belowdisplayshortskip}{7pt plus 3pt minus 3pt}
+\numberwithin{equation}{section}
+\newcommand{\HF}{\mathrm{HF}}
+\newcommand{\EAD}{\mathrm{EAD}}
 
 % --- Graphics and color ---
 \usepackage{graphicx}
@@ -47,8 +55,8 @@
   urlcolor=NavyBlue,
   bookmarksnumbered=true,
   pdfstartview=FitH,
-  pdfauthor={Bartosz Nowak},
-  pdftitle={Daloc: A Cross-Chain Prime Brokerage Platform for Collateralized Credit}
+  pdfauthor={Bartosz Nowak, Marcello Bardus, Jamil Bouhdada},
+  pdftitle={Daloc: A Cross-Chain Prime Brokerage Protocol for Collateralized Credit}
 ]{hyperref}
 \usepackage{url}
 \def\UrlBreaks{\do\/\do-\do.\do_}
@@ -66,7 +74,8 @@
 \setlength{\parindent}{0pt}
 \setlength{\parskip}{0.6em}
 \emergencystretch=1.5em
+\widowpenalty=10000
+\clubpenalty=10000
 
 % --- Custom commands ---
 \newcommand{\daloc}{\textsc{Daloc}}
-\newcommand{\khash}{\mathsf{keccak256}}
