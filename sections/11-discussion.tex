@@ -1,25 +1,34 @@
 \section{Discussion}
+\label{sec:discussion}
 
-\subsection{Risks}
+\subsection{Risks and Limitations}
 
-\textbf{External venue dependency.} Governance changes at an underlying venue---reduced LTV ceilings, modified rate curves---directly affect externally-sourced positions. \emph{Mitigation:} vault-funded path requires no external venue; mandate concentration caps limit per-venue exposure.
+\textbf{Smart-contract risk.} The hub, issuers, CDPs, and debt tokens share common contract logic. A critical vulnerability in a widely-used contract could affect multiple markets. Formal verification covers token conservation and epoch monotonicity; broader functional coverage is an ongoing effort.
 
-\textbf{Correlated rate and price risk.} In a crash, collateral value drops while venue utilization spikes, raising the variable rate precisely when the buffer shrinks. \emph{Mitigation:} rate buffers are sized from tail simulations under the joint distribution (Section~\ref{sec:risk}).
+\textbf{Oracle staleness.} Liquidation detection depends on timely oracle updates. If oracle prices lag during a flash crash, detection is delayed and recovery proceeds may fall below debt. The two-epoch structure bounds this lag to one additional epoch window; markets with more volatile collateral should configure shorter epochs.
 
-\textbf{Rehypothecation risk.} Markets that permit rehypothecation expose positions to correlated venue failures. The protocol enforces correct execution of the rules, not their prudence.
+\textbf{Proof-system failures.} If the ZK prover becomes unavailable, no new epochs can advance. Existing positions are safe (funds remain in CDPs) but cannot settle new interest or originate. Recovery requires a new prover deployment. No fallback to optimistic settlement is currently implemented.
 
-\textbf{Smart contract and circuit risk.} A hub bug could affect all capital flows; a soundness flaw in a settlement program could permit invalid state transitions. \emph{Mitigation:} independent audits, formal verification of accounting invariants, and on-chain invariant monitoring (Section~\ref{sec:settlement}).
+\textbf{Dual-liquidation race.} A liquidity-forwarding loan exposes the vault to the gap between \daloc{}'s two-epoch liquidation and the venue's instant liquidation trigger. Reserve sizing (Section~\ref{sec:risk}) attempts to make this gap negligible, but a sufficiently sharp collateral crash can trigger the venue's liquidation before \daloc{}'s grace period completes, leaving a residual shortfall absorbed by the vault.
 
-\textbf{Oracle risk.} Oracle logic is embedded in each market's ZK programs. A manipulable oracle can produce incorrect liquidation or accrual facts. \emph{Mitigation:} freshness is verified inside the proof; participants choose which markets to interact with.
+\textbf{Cross-chain liveness.} CCTP bridge delays or outages stall capital delivery on Prime Trade origination and close. Positions remain valid but economically frozen until the bridge resumes. Markets that rely on a single bridge path inherit its liveness profile.
 
 \subsection{Future Capabilities}
 
-\textbf{Operator ecosystem.} Multiple independent operators each run their own vault with a distinct mandate. Competition for LP capital creates pressure toward better risk-adjusted returns; the mandate makes comparison meaningful because strategies are verified per-epoch against declared bounds.
+The architecture is designed for staged extension. Near-term additions include:
+\begin{itemize}
+  \item \textbf{Risk House ecosystem.} Independent risk underwriters register permissionlessly, compete on terms, and backstop specific collateral classes. The kernel bounds prevent a weak house from degrading system-wide safety. Detailed in Section~\ref{sec:risk}.
+  \item \textbf{Under-collateralized credit.} On-chain reputation, verifiable off-chain creditworthiness (e.g.\ institutional attestations), and cross-protocol track records enable LTV thresholds above~100\% for qualified borrowers under tighter Risk House oversight.
+  \item \textbf{Cross-margining.} Correlated positions under the same borrower and same Risk House can share margin via a portfolio-level health factor, improving capital efficiency without weakening per-position isolation at the settlement layer.
+  \item \textbf{Options and nonlinear collateral.} Collateral-class adapters for options and other nonlinear claims, valued at stressed executable close-out value rather than oracle mark, extend the protocol beyond spot and yield-bearing tokens.
+  \item \textbf{Multi-venue Prime Trade.} Margin agents generalize beyond HyperEVM to additional perpetual venues, each as a separate bridge adapter and constraint set.
+  \item \textbf{Operator ecosystem.} The architecture supports multiple independent vault operators, each running a vault instance with a distinct mandate---one conservative (high-grade collateral, short tenors), another aggressive (broader collateral, higher concentration limits). Competition between operators for LP capital creates pressure toward better risk-adjusted returns. Per-market settlement operators may independently rotate or compete, mirroring vault-level competition at the settlement layer.
+  \item \textbf{Institutional access.} Criteria-based matching enables regulated counterparties to participate in the unified order book without a permissioned fork. A regulated lender posts quotes restricted to KYC-verified borrowers; the matching engine enforces the restriction without fragmenting the liquidity surface. This path requires no protocol modification---only attestation issuers and criteria definitions.
+  \item \textbf{Maturity management.} Refinancing (Section~\ref{sec:lifecycle}) already allows mid-term rollovers. At scale, automated maturity laddering---where the operator pre-matches refinancing quotes ahead of expiry---can smooth redemption waves, reduce cliff-event risk, and improve capital utilization across the loan book.
+\end{itemize}
 
-\textbf{Under-collateralized credit.} Protocol-controlled custody (Section~\ref{sec:crosschain}), where borrowed capital cannot leave the constrained execution environment, extends naturally to credit lines exceeding collateral value---the credit decision reduces to risk-engine parameterization.
+\subsection{Conclusion}
 
-\textbf{Cross-margining.} ZK programs can encode netting rules across a borrower's active positions, recognizing offsetting exposure for reduced buffer sizing without weakening per-loan isolation (Section~\ref{sec:positions}).
+\daloc{} unifies collateralized credit, cross-chain capital coordination, and risk quantification within a single settlement layer. The Harvest Vault funds loans directly under a cryptographically-enforced mandate; external venues provide overflow capacity beyond the vault's balance sheet. Fixed-rate, fixed-term loans; leveraged perpetual trading without selling the underlying; and passive fixed-rate yield share a common matching and settlement infrastructure.
 
-\section{Conclusion}
-
-\daloc{} unifies cross-chain prime brokerage, fixed-rate lending, and passive LP yield into a single platform enforced by zero-knowledge proofs. The design separates trust-minimized surfaces (market logic, settlement, position isolation) from administered ones (vault operation, risk pricing, solver competition), constraining the latter with cryptographic verification. Capital efficiency, institutional compliance, and cross-chain reach coexist without compromising per-position isolation.
+Criteria-based matching lets restricted and unrestricted counterparties share a single liquidity surface. Zero-knowledge proofs guarantee settlement correctness and underwriting integrity; mandate compliance is enforced through fee-gated attestation. Per-position and per-market isolation bound the blast radius of defaults. The protocol presents an architecture for the transition from pool-based, variable-rate, single-chain lending to structured, provable, multi-chain credit.
