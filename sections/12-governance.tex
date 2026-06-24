@@ -1,17 +1,21 @@
 \section{Governance and Trust Assumptions}
 
-The protocol's administered surface is deliberately narrow. Markets are immutable, vault contracts are non-upgradeable, and every epoch advance requires a valid fact in the facts registry (Section~\ref{sec:settlement}). The two surfaces that require trust are the hub contract and the liveness of off-chain infrastructure.
+The protocol's trust surface is deliberately narrow. Market parameters are fixed at creation and identified by their hash; every epoch advance requires a valid zero-knowledge proof registered in the facts registry (Section~\ref{sec:settlement}). Trust concentrates in the hub contract, which governs all capital flows, and in the liveness of off-chain infrastructure.
+
+Beyond these trust surfaces, the protocol minimizes dependence on any single party. Markets are independent state machines (Section~\ref{sec:architecture}) that advance their own epochs without shared global state; deployment is permissionless, and so is participation as a solver, liquidator, or epoch executor. A forced-inclusion path through the settlement layer ensures that no operator can permanently censor intents or block exits.
+
+Safety is structural: the system invariants of Section~\ref{sec:settlement} hold across all reachable states, and no state transition can occur without a valid zero-knowledge proof. Liveness depends on each market's operator; a configurable timeout bounds how long a market can stall before a fallback operator may step in. The architecture targets fund recoverability directly from L1, independent of off-chain infrastructure. Each market defines its own data-availability policy, and the architecture admits progressive trust reduction as markets mature.
 
 \subsection{Protocol Administration}
 
-The hub contract is upgradeable, governed by a multisig with timelock. Upgradeability permits response to critical vulnerabilities in the token rail, at the cost of trust in the multisig. Because the hub is the single authorization point for all capital flows (Section~\ref{sec:architecture}), an upgrade can alter routing and pause behavior across every market simultaneously. Pause, unpause, and bridge adapter whitelisting (Section~\ref{sec:crosschain}) are also multisig actions; new cross-chain routes are therefore permissioned even though markets themselves are permissionless.
+A multisig with timelock governs protocol contracts, which are upgradeable. Upgradeability permits response to critical vulnerabilities at the cost of trust in the multisig. Because core contracts control capital flows and settlement execution, an upgrade can alter routing and pause behavior across every market simultaneously. Pause and bridge-adapter whitelisting (Section~\ref{sec:crosschain}) are also multisig actions; cross-chain routes are permissioned even though markets are not.
 
 \subsection{Liveness Dependencies}
 
-The settlement engine's correctness is guaranteed by zero-knowledge proofs (Section~\ref{sec:settlement}), but its liveness is not: if the engine halts, no new epochs advance. Existing positions remain safe --- collateral stays locked, debt is unchanged, intent cancellation remains available --- but undercollateralized positions go undetected until epochs resume.
+Settlement correctness is guaranteed by zero-knowledge proofs (Section~\ref{sec:settlement}), but liveness is not: if a market's off-chain infrastructure halts, no new epochs advance for that market. Existing positions remain safe---collateral stays locked, debt is unchanged, intent cancellation remains available---but undercollateralized positions go undetected until epochs resume.
 
-If no epoch advances within one hour, the protocol enters liveness-failure mode: funds are released for withdrawal and positions may unwind without further settlement proofs.
+Each market defines a liveness timeout. If no epoch advances within that window, users may withdraw deposited capital, and the market may permit a fallback operator to resume epoch production.
 
-The risk engine produces LTV limits, rates, and buffer sizes off-chain; the mandate (Section~\ref{sec:lp}) enforces hard floors --- rate floors, LTV ceilings, concentration caps --- but does not validate the model between those bounds.
+LTV limits, rates, and buffer sizes are produced off-chain by the risk engine. The serving computation is cryptographically verified via zero-knowledge proof (Section~\ref{sec:risk}), ensuring quotes derive correctly from the declared kernel and risk policy. The mandate (Section~\ref{sec:lp}) enforces hard floors: rate floors, LTV ceilings, concentration caps. Neither mechanism validates the underlying model calibration or Monte Carlo assumptions between those bounds.
 
-Cross-chain USDC movement depends on Circle's CCTP attester infrastructure (Section~\ref{sec:crosschain}); attester liveness and censorship properties are inherited, not controlled by the protocol. Cross-chain authorization correctness is cryptographic --- HDP produces Merkle proofs over actual chain state --- but proof-generation availability depends on the provider.
+Cross-chain USDC movement depends on Circle's CCTP attester infrastructure (Section~\ref{sec:crosschain}); the protocol inherits the attester's liveness and censorship properties. Authorization correctness is cryptographic---HDP produces Merkle proofs over actual chain state---but proof-generation availability depends on the data provider.
