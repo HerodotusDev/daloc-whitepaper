@@ -5,7 +5,7 @@
 
 Time advances in \emph{epochs}: bounded settlement windows in which the off-chain engine matches intents, runs state-transition programs, and commits a snapshot on-chain. Epoch duration is configurable per market, trading latency against proof cost.
 
-Each snapshot carries five Merkle roots: executable transfers, internal market state, debt records, liquidation events, and CDP deployments.\footnote{The internal market state uses a Poseidon-based~\cite{poseidon2021} Merkle Patricia Trie for ZK-friendly state management; the other four roots use keccak-hashed binary trees for on-chain proof verification.} Posting a new epoch requires a valid \emph{fact} in the facts registry, attesting correct state transition via zero-knowledge proof.
+Each snapshot carries five Merkle roots: executable transfers, internal market state, debt records, liquidation events, and CDP deployments.\footnote{Internal state uses ZK-friendly Merkle structures; on-chain roots use keccak-hashed binary trees.} Posting a new epoch requires a valid \emph{fact} in the facts registry, attesting correct state transition via zero-knowledge proof.
 
 Execution is inclusion-proof driven: anyone can execute a committed leaf by supplying a Merkle proof against the epoch root stored on-chain.
 
@@ -13,26 +13,11 @@ Each epoch advance processes three concurrent generations: finalizing loans from
 
 \subsection{Settlement Programs}
 
-On-chain contracts are settlement executors: they verify Merkle proofs and execute committed transfers and hook chains but contain no market-specific logic. All behavior --- interest computation, liquidation detection, oracle selection, collateral policy --- lives in zero-knowledge programs whose outputs the contracts verify.
+On-chain contracts are settlement executors: they verify Merkle proofs and execute committed transfers and hook chains but contain no market-specific logic. All behavior---interest computation, liquidation detection, oracle selection, collateral policy---lives in zero-knowledge programs whose outputs the contracts verify.
 
-Programs split by economic cadence: \textbf{Matching} is one-time per loan (transfers, debt issuance, CDP authorization). \textbf{Interest accrual} is periodic (per debt per time window). \textbf{Liquidation} is event-triggered (health breaches produce liquidation leaves). \textbf{Close} is terminal after repayments and accrual catch up. \textbf{Compliance} is periodic per vault epoch (Section~\ref{sec:lp}).
+Programs split by economic cadence. \textbf{Matching} is one-time per loan---transfers, debt issuance, CDP authorization, and criteria-compatibility evaluation (Section~\ref{sec:architecture}). \textbf{Interest accrual} is periodic per debt per time window. \textbf{Liquidation} is event-triggered when health breaches produce liquidation leaves. \textbf{Close} is terminal after repayments and accrual catch up. \textbf{Compliance} is periodic per vault epoch, attesting operator behavior against the mandate (Section~\ref{sec:lp}).
 
-All programs submit results through a single \emph{facts registry} that accepts a fact hash and returns whether it is valid. Two fact types carry all market state:
-
-A \textbf{state-transition fact} authorizes an epoch advance:
-\begin{equation}
-  \begin{split}
-    f_{\mathit{st}} &= \khash(h_{\mathit{prog}},\, \mathit{chainId},\, \mathit{issuer}, \\
-    &\qquad \mathit{epoch}_{\mathit{prev}},\, \mathit{epoch}_{\mathit{next}})
-  \end{split}
-  \label{eq:stfact}
-\end{equation}
-where $\mathit{epoch}_{\mathit{prev}}$ and $\mathit{epoch}_{\mathit{next}}$ each encode the full quintuple of Merkle roots. An \textbf{interest fact} authorizes accrual on one debt:
-\begin{equation}
-  f_{\mathit{int}} = \khash(h_{\mathit{rate}},\, \mathit{chainId},\, \mathit{debtId},\, t_{\mathit{from}},\, t_{\mathit{to}},\, \Delta I)
-  \label{eq:intfact}
-\end{equation}
-where $\Delta I$ is the interest amount over the accrual window $[t_{\mathit{from}}, t_{\mathit{to}})$. The on-chain contract reconstructs the expected hash from its immutable state, checks the registry, and applies the values only if valid.
+All programs submit results through a single \emph{facts registry} that accepts a fact hash and returns whether it is valid. Two fact types carry all market state. A \textbf{state-transition fact} authorizes an epoch advance, binding the settlement program, chain, issuer, and the previous and next epoch roots (each encoding the full quintuple of Merkle roots). An \textbf{interest fact} authorizes accrual on one debt, binding the rate program, chain, debt identifier, accrual window, and computed interest amount. The on-chain contract reconstructs the expected fact from its fixed parameters, checks the registry, and applies values only if valid.
 
 \subsection{Market and Loan Contracts}
 
@@ -46,9 +31,9 @@ Oracle logic is embedded in the market's zero-knowledge programs. Programs read 
 
 \subsection{System Invariants}
 
-The architecture maintains three invariants across all states:
+Three invariants hold across all states:
 \begin{enumerate}
   \item \textbf{Token conservation.} For every asset, total balances across all market contracts equal deposited collateral plus supplied principal minus withdrawals. No operation creates or destroys tokens.
-  \item \textbf{Epoch monotonicity.} Each market's epoch advances strictly by one, only when the facts registry contains a valid state-transition fact linking the previous and next roots (Equation~\ref{eq:stfact}). No epoch can be skipped, replayed, or forked.
+  \item \textbf{Epoch monotonicity.} Each market's epoch advances strictly by one, only when the facts registry contains a valid state-transition fact linking the previous and next roots. No epoch can be skipped, replayed, or forked.
   \item \textbf{Position isolation.} Each loan's contracts are independently deployed, independently liquidatable, and share no mutable state with any other loan. One position's insolvency cannot affect another.
 \end{enumerate}
