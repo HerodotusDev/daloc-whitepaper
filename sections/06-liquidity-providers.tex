@@ -1,11 +1,11 @@
 \section{The Harvest Vault}
 \label{sec:lp}
 
-The Harvest Vault gives passive LPs pool-style UX while an operator deploys capital into loans under a publicly auditable mandate verified per-epoch by zero-knowledge proof.
+The Harvest Vault's operator originates loans, responds to lifecycle events, and manages portfolio concentration---all within bounds set by a publicly auditable mandate and enforced per-epoch by a zero-knowledge proof. The vault is the canonical lending book: when it has sufficient idle capital, it funds loans directly at the full fixed rate (Section~\ref{sec:capital}); when demand exceeds capacity, it routes through external venues and commits only hedging reserves. Passive LPs deposit USDC and earn yield without trusting the operator's discretion---the mandate is the trust anchor, not reputation.
 
 \subsection{Operator and Mandate}
 
-The operator's strategy is bounded by a \textbf{mandate}, a policy committed on-chain as a hash at vault deployment. The mandate specifies:
+The operator deploys vault capital by submitting solver quotes to the order book (Section~\ref{sec:architecture}), competing on terms like any other solver. The operator's strategy is bounded by a \textbf{mandate}---a policy committed on-chain as a hash at vault deployment. Each mandate specifies:
 \begin{itemize}
   \item \textbf{Allowed collateral set:} asset addresses the operator may accept as loan collateral.
   \item \textbf{Per-collateral LTV ceiling:} maximum loan-to-value ratio the operator may offer on each collateral type.
@@ -14,27 +14,25 @@ The operator's strategy is bounded by a \textbf{mandate}, a policy committed on-
   \item \textbf{Liquidation reserve requirement:} minimum idle capital maintained at all times for liquidation response and withdrawal settlement.
 \end{itemize}
 
-The mandate constrains what the operator \emph{can} do, not what they \emph{must} do; within its bounds, the operator retains full discretion.
+A mandate constrains what the operator \emph{can} do, not what they \emph{must} do; within its bounds, the operator retains full discretion on timing, counterparty selection, and position sizing.
 
 \subsection{Compliance Proof}
 
-Each epoch, the operator produces a zero-knowledge proof that every action satisfied the mandate. The proof takes prior vault state, the epoch's actions, and the mandate hash as public inputs, outputting a \textbf{compliance fact} registered in the facts registry (Section~\ref{sec:settlement}):
-\begin{equation}
-  \begin{split}
-    f_{\mathit{compliance}} &= \khash(h_{\mathit{prog}},\, \mathit{chainId},\, \mathit{vault}, \\
-    &\qquad \mathit{epoch}_{\mathit{prev}},\, \mathit{epoch}_{\mathit{next}},\, h_{\mathit{mandate}})
-  \end{split}
-  \label{eq:compliancefact}
-\end{equation}
-where $h_{\mathit{prog}}$ is the compliance program hash, $\mathit{vault}$ is the vault contract address, and $h_{\mathit{mandate}}$ is the committed mandate hash.
+Each epoch, the operator produces a zero-knowledge proof that every action satisfied the mandate. The proof takes prior vault state, the epoch's actions, and the mandate hash as public inputs, outputting a compliance fact registered in the facts registry (Section~\ref{sec:settlement}). An invalid or missing compliance proof does not halt loan settlement or affect borrowers---only the operator's fee is at risk (Section~\ref{subsec:feegating}).
 
 \subsection{Fee-Gating}
+\label{subsec:feegating}
 
-The operator earns a spread fee escrowed during each epoch. A valid compliance proof releases the escrow to the operator; otherwise it flows back into NAV. An invalid or missing proof does not halt loan settlement or affect borrowers; only the operator's cut is at risk.
+Operators earn a spread fee escrowed during each epoch. A valid compliance proof releases the escrow; otherwise it flows back into vault NAV as LP uplift. LP-facing yield is not contingent on the compliance proof---LPs always receive their share of interest and buffer surplus.
 
 \subsection{NAV and Shares}
 
-LPs deposit USDC and receive ERC-20 shares. NAV equals idle USDC plus debt-token claim values plus escrowed hedging buffers plus accrued interest, less USDC ring-fenced for pending withdrawals. Share price is NAV per outstanding supply, with a virtual offset against inflation attacks. Yield comes from fixed-rate interest (vault-funded loans), buffer surplus (externally-sourced loans), and liquidation proceeds. Impairments reduce NAV directly via share-price adjustment.
+LPs deposit USDC and receive ERC-20 shares. The vault's net asset value is
+\begin{equation}
+  \mathrm{NAV} = U_{\mathrm{idle}} + \sum_{j} v_j \cdot n_j + B_{\mathrm{escrow}} + I_{\mathrm{accrued}} - W_{\mathrm{pending}},
+  \label{eq:nav}
+\end{equation}
+where $U_{\mathrm{idle}}$ is undeployed USDC, $v_j \cdot n_j$ is the claim value (Equation~\ref{eq:debtprice}) times quantity for each held debt token~$j$, $B_{\mathrm{escrow}}$ is escrowed hedging buffers, $I_{\mathrm{accrued}}$ is accrued but uncollected interest, and $W_{\mathrm{pending}}$ is USDC ring-fenced for pending withdrawals. Share price is NAV per outstanding supply, with a virtual offset against inflation attacks. On vault-funded loans, the vault earns the full fixed-rate coupon; on liquidity-forwarding loans, the vault earns buffer surplus. Impairments reduce NAV directly via share-price adjustment.
 
 \subsection{Epoch Withdrawal}
 \label{subsec:withdrawal}
@@ -50,11 +48,12 @@ Instant withdrawal is incompatible with capital in active positions. The vault q
 
 Until settlement, the LP remains exposed to pool gains and losses. The epoch delay prevents withdrawing at a stale NAV before a loss lands.
 
-\subsection{Risk Decomposition}
+Table~\ref{tab:risk} decomposes risk by participant and origination path.
 
 \begin{table}[ht]
   \centering
   \small
+  \renewcommand{\arraystretch}{1.15}
   \begin{tabular}{@{}llll@{}}
     \toprule
     \textbf{Party} & \textbf{Risk borne} & \textbf{Why} & \textbf{Compensation} \\
@@ -62,11 +61,12 @@ Until settlement, the LP remains exposed to pool gains and losses. The epoch del
     Borrower       & Collateral decline     & Seeks leverage      & Fixed-rate USDC \\
     Ext.\ venue    & Smart-contract, util.  & Money market         & Variable rate \\
     Rate buffer    & Variable ${>}$ fixed   & Rate transform       & Surplus \\
-    Option buffer  & Swap cost ${>}$ escrow & Execution risk       & Escrow ${\sim}$95\% \\
+    Conv.\ reserve & Swap cost ${>}$ escrow & Execution risk       & Escrow ${\sim}$95\% \\
+    Risk House     & Liquidation shortfall  & Backstop capital     & Fee, gated on policy \\
     Vault LP       & Default, exhaustion    & Absorbs residual     & Coupon or surplus \\
     Operator       & Mandate violation      & Active mgmt          & Fee, gated on proof \\
     \bottomrule
   \end{tabular}
-  \caption{Risk decomposition. Each risk channel is routed to the participant with the comparative advantage to bear it. The rate buffer and option buffer rows apply only to externally-sourced loans.}
+  \caption{Risk decomposition. Each risk channel is routed to the participant with the comparative advantage to bear it. External venue, rate buffer, and conversion reserve rows apply only to liquidity-forwarding loans; vault-funded loans skip directly from borrower to Risk House and vault LP. Risk House backstop is detailed in Section~\ref{sec:risk}.}
   \label{tab:risk}
 \end{table}
