@@ -3,22 +3,22 @@
 
 \subsection{Origination}
 
-A borrower posts a request, solvers respond with quotes, and the accepted quote is committed into an epoch's settlement tree and executed atomically. Four origination pipelines exist, each assembled as an atomic hook chain:
+A borrower posts a request, solvers respond with quotes, and the accepted quote is committed into an epoch's settlement tree and executed atomically. Which capital path applies (Section~\ref{sec:capital}) determines the pipeline complexity. Four origination pipelines exist, each assembled as an atomic hook chain:
 
-\textbf{Vault-funded.} The vault transfers USDC principal directly to the borrower (or to the margin agent for Prime Trade positions). The collateral manager holds collateral without supplying it to an external venue; no hedging buffers are reserved.
+\textbf{Vault-funded.} The vault transfers USDC principal directly to the borrower (or to the margin agent for Prime Trade positions); the CDP holds collateral as a liquidation hedge without supplying it to an external venue, and no hedging buffers are reserved.
 
-\textbf{Externally-sourced.} The hook chain deposits collateral into the collateral manager, supplies it to the external venue, borrows USDC against it, and transfers the USDC to the borrower. A rate buffer is escrowed to hedge the mismatch between the borrower's fixed rate and the venue's variable rate.
+\textbf{Liquidity-forwarding.} The hook chain deposits collateral into the collateral manager, supplies it to the external venue, borrows USDC against it, and transfers the USDC to the borrower. A rate buffer is escrowed to hedge the mismatch between the borrower's fixed rate and the venue's variable rate.
 
-\textbf{Externally-sourced with collateral swap.} For long-tail collateral not listed on the external venue (e.g.\ LDO, UNI): a swap hook converts the collateral to a venue-listed intermediate (e.g.\ LDO $\to$ WETH), then the chain proceeds as above. Both a rate buffer and an option buffer are reserved; the option buffer covers the round-trip swap cost at close.
+\textbf{Liquidity-forwarding with collateral swap.} For long-tail collateral not listed on the external venue (e.g.\ LDO, UNI): a swap hook converts the collateral to a venue-listed intermediate (e.g.\ LDO $\to$ WETH) via AMM, RFQ, or aggregator, then the chain proceeds as above. Both a rate buffer and a collateral conversion reserve are escrowed.
 
 \textbf{Hyperliquid margin.} For Prime Trade positions, the hook chain follows either pipeline above but diverts at the final step: instead of transferring USDC to the borrower, a bridge hook burns it via CCTP~\cite{cctp} to a per-loan margin agent on HyperEVM, which deposits it as margin (Section~\ref{sec:crosschain}). Collateral never leaves Ethereum.
 
 \begin{figure}[ht]
   \centering
   \begin{tikzpicture}[
-      box/.style={draw, thick, rounded corners=3pt, fill=gray!8,
+      box/.style={draw, thick, rounded corners=3pt, fill=gray!12,
       minimum height=1.2cm, minimum width=2.8cm, align=center, font=\small\sffamily},
-      arr/.style={-{Stealth[length=8pt]}, thick},
+      arr/.style={-{Stealth[length=9pt]}, thick},
       lab/.style={font=\small\sffamily, fill=white, inner sep=3pt}
     ]
     \node[box] (B)   at (0,0)      {Borrower};
@@ -32,40 +32,44 @@ A borrower posts a request, solvers respond with quotes, and the accepted quote 
     \draw[arr] ([xshift=10pt]AV.north) -- node[lab,right]{3.\ USDC} ([xshift=10pt]CDP.south);
     \draw[arr] (CDP) -- node[lab,above]{5.\ debt tokens} (V);
   \end{tikzpicture}
-  \caption{Origination, externally-sourced pipeline. Steps 1--4 execute as a single atomic hook chain. Debt tokens (step~5) are minted to the vault; the rate buffer is escrowed. Vault-funded origination omits the external venue and transfers principal directly.}
+  \caption{Origination, liquidity-forwarding pipeline. Steps 1--4 execute as a single atomic hook chain. Debt tokens (step~5) are minted to the vault; the rate buffer is escrowed. Vault-funded origination omits the external venue and transfers principal directly.}
   \label{fig:origination}
 \end{figure}
 
 \subsection{Refinancing}
 
-A borrower refinances by posting a single refinancing intent. The matching engine treats it identically to an origination quote. On match, the existing loan closes and a new one originates atomically within the same epoch. When the Harvest Vault is creditor on both sides, refinancing is a pure accounting event---no capital moves, only terms change. When the creditor differs, repayment and new funding settle within the same settlement tree.
+Not every loan runs to its original maturity. A borrower refinances by posting a single refinancing intent; the matching engine treats it identically to an origination quote. On match, the existing loan closes and a new one originates atomically within the same epoch. When the Harvest Vault is creditor on both sides, refinancing is a pure accounting event---no capital moves, only terms change. When the creditor differs, repayment and new funding settle within the same settlement tree.
 
 \subsection{Close and Liquidation}
 
-On voluntary close, the borrower deposits USDC into the loan's debt contract. After interest accrual is verified (Section~\ref{sec:tokens}), the vault redeems its position and a close hook chain atomically repays the variable debt on the external venue, withdraws the collateral, and returns it to the borrower (with a reverse swap for collateral-swap loans). Any hedging surplus stays in the vault as LP yield. Vault-funded loans skip the external unwind: the borrower repays, and collateral is released directly.
+On voluntary close, the borrower deposits USDC into the loan's debt contract. After interest accrual is verified (Section~\ref{sec:tokens}), the vault redeems its position and a close hook chain atomically repays the variable debt on the external venue, withdraws the collateral, and returns it to the borrower (with a reverse swap for collateral-swap loans). Hedging surplus stays in the vault as LP yield. Vault-funded loans skip the external unwind: the borrower repays, and collateral is released directly.
 
 Liquidation triggers when the health factor drops below~1:
 \begin{equation}
-  \mathit{HF} = \frac{C_{\mathit{value}} \cdot \theta}{D} < 1
+  \HF = \frac{C_{\mathrm{val}}\,\theta}{D} < 1,
   \label{eq:healthfactor}
 \end{equation}
-where $C_{\mathit{value}}$ is the collateral's current market value, $\theta$ the loan's liquidation threshold (set at origination from the lender's maximum LTV), and $D$ the outstanding debt.
+where $C_{\mathrm{val}}$ is the collateral's current market value, $\theta$ the loan's liquidation threshold (set at origination from the lender's maximum LTV), and $D$ the outstanding debt.
 
-Liquidation spans two epochs. In the first, a proof attesting $\mathit{HF} < 1$ is committed as a leaf in the epoch's liquidation root---detection is identity-agnostic, requiring only a proof that barriers have been breached.
+Liquidation spans two epochs, separating detection from seizure.
 
-In the second, the liquidator identifies itself on-chain, repays outstanding debt $R$ via the debt token contract, and seizes collateral worth $R \cdot (1 + \beta)$ from the CDP, where $\beta$ is the liquidation bonus fixed at origination. Partial liquidation repays the minimum $R$ that restores the health factor above~1; full liquidation repays the entire debt and seizes all remaining collateral. Separating detection from seizure ensures collateral moves only after debt repayment is recorded on-chain.
+\textbf{Detection} (epoch~$n$). Any party generates a zero-knowledge proof reading the collateral price, outstanding debt, and liquidation threshold from on-chain state, asserting $\HF < 1$. A liquidation leaf is committed in the epoch's liquidation root. Detection is identity-agnostic and capital-free: the prover reveals nothing beyond the breach.
 
-Because each loan is isolated, bad debt cannot cascade across positions. Any shortfall reduces vault NAV through impaired debt-token value (Section~\ref{sec:lp}).
+\textbf{Grace period} (epoch boundary). Between detection and seizure, the borrower may add collateral or partially repay debt to restore $\HF > 1$. The epoch duration---configurable per market---determines the length of this window.
 
-\begin{figure}[t]
+\textbf{Seizure} (epoch~$n{+}1$). A liquidator provides a Merkle proof against the liquidation root, repays outstanding debt $R$ via the debt token contract, and seizes collateral worth $R \cdot (1 + \beta)$ from the CDP, where $\beta$ is the liquidation bonus fixed at origination. Partial liquidation repays the minimum $R$ that restores the health factor above~1; full liquidation repays the entire debt and seizes all remaining collateral. The bonus compensates the liquidator for price risk during the grace period. Collateral moves only after debt repayment is recorded on-chain.
+
+Because each loan is isolated, bad debt cannot cascade across positions. Shortfalls reduce vault NAV through impaired debt-token value (Section~\ref{sec:lp}).
+
+\begin{figure}[ht]
   \centering
   \begin{tikzpicture}[
-      box/.style={draw, thick, rounded corners=3pt, fill=gray!8,
+      box/.style={draw, thick, rounded corners=3pt, fill=gray!12,
       minimum height=1.1cm, minimum width=2.5cm, align=center, font=\small\sffamily},
-      arr/.style={-{Stealth[length=8pt]}, thick},
+      arr/.style={-{Stealth[length=9pt]}, thick},
       lab/.style={font=\footnotesize\sffamily, fill=white, inner sep=2pt},
       sub/.style={font=\small\sffamily\bfseries},
-      chain/.style={font=\footnotesize\sffamily\itshape, text=gray!70}
+      chain/.style={font=\footnotesize\sffamily\itshape, text=gray!50}
     ]
     % --- Column (a) Originate ---
     \node[sub] at (-4.3,1) {(a) Originate};
@@ -89,7 +93,7 @@ Because each loan is isolated, bad debt cannot cascade across positions. Any sho
 
     % --- Column (c) Close ---
     \node[sub] at (4.3,1) {(c) Close};
-    \node[chain] at (4.3,0.5) {HyperEVM $\to$ Eth.};
+    \node[chain] at (4.3,0.5) {HyperEVM $\to$ Ethereum};
     \node[box] (c1) at (4.3,0)    {HyperCore};
     \node[box] (c2) at (4.3,-1.7) {CCTP};
     \node[box] (c3) at (4.3,-3.4) {Ext.\ Venue};
