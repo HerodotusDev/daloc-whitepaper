@@ -1,32 +1,33 @@
 \section{Capital Management}
+\label{sec:capital}
 
-The origination pipelines (Section~\ref{sec:lifecycle}) differ fundamentally in how much capital the vault must commit.
+The Harvest Vault is the canonical capital source. When idle vault capital exceeds the requested principal, the operator funds the loan directly---transferring USDC to the borrower and receiving debt tokens as the creditor of record. When demand exceeds vault capacity, solvers extend reach through external lending venues, reserving vault capital only for the hedging instruments that convert variable-rate external funding to fixed terms. The operator's mandate (Section~\ref{sec:lp}) governs the allocation between paths.
 
 \subsection{Vault-Funded Path}
 
-The vault commits principal at 1:1. No variable-rate leg, no hedging buffers. Yield per loan is higher but capital leverage is lower.
+The vault transfers principal directly to the borrower (or to the margin agent for Prime Trade). The CDP holds collateral as a liquidation hedge; no external venue is involved. Capital is committed at 1:1---no variable-rate mismatch, no hedging buffers---and the vault captures the full fixed-rate spread. This path is preferred whenever vault capacity permits.
 
-\subsection{Externally-Sourced Path}
+\subsection{Liquidity-Forwarding Path}
 
-The vault commits only 3--7\% of principal as hedging reserves (rate buffer plus option buffer), achieving 15--30$\times$ capital leverage. Pledged collateral simultaneously secures the \daloc{} loan and the external venue position. External venues are suppliers, not competitors: the platform aggregates their liquidity rather than competing for deposits.
+When vault idle capital is insufficient---because existing deployments have consumed it, or because the loan size exceeds available balance---solvers source principal from established lending venues~\cite{forwardingliquidity2022}. The CDP deposits collateral into the external venue (Aave~\cite{aave2026}, Morpho~\cite{morphoblue2023}, Spark~\cite{spark2023}), borrows USDC against it, and routes the USDC to the borrower. The vault commits only a fraction of principal as hedging reserves (rate buffer plus collateral conversion reserve), achieving high capital leverage. Pledged collateral simultaneously secures the \daloc{} loan and the external venue position.
 
 \begin{figure}[ht]
   \centering
   \begin{tikzpicture}[
-      box/.style={draw, thick, rounded corners=3pt, fill=gray!8,
+      box/.style={draw, thick, rounded corners=3pt, fill=gray!12,
       minimum height=1.2cm, minimum width=2.8cm, align=center, font=\small\sffamily},
-      arr/.style={-{Stealth[length=8pt]}, thick},
+      arr/.style={-{Stealth[length=9pt]}, thick},
       lab/.style={font=\small\sffamily, fill=white, inner sep=3pt},
-      sub/.style={font=\sffamily\bfseries}
+      sub/.style={font=\small\sffamily\bfseries}
     ]
     % --- (a) Vault-Funded ---
-    \node[sub] at (0,1) {(a) Vault-Funded --- 1:1 capital};
+    \node[sub] at (0,1) {(a) Vault-Funded --- full spread};
     \node[box] (V1) at (-2.5,0) {Vault};
     \node[box] (B1) at (2.5,0)  {Borrower};
     \draw[arr] (V1) -- node[lab,above]{USDC} (B1);
 
-    % --- (b) Externally-Sourced ---
-    \node[sub] at (0,-1.8) {(b) Externally-Sourced --- $\sim$20:1 leverage};
+    % --- (b) Liquidity-Forwarding ---
+    \node[sub] at (0,-1.8) {(b) Liquidity-Forwarding --- ${\sim}$20:1 leverage};
     \node[box] (V2) at (-4,-3)    {Vault};
     \node[box] (CM) at (0,-3)     {CDP};
     \node[box] (AV) at (0,-4.8)   {Ext.\ Venue};
@@ -36,18 +37,19 @@ The vault commits only 3--7\% of principal as hedging reserves (rate buffer plus
     \draw[arr] (CM) -- node[lab,right]{collateral} (AV);
     \draw[arr] (AV) -- node[lab,right]{USDC} (B2);
   \end{tikzpicture}
-  \caption{Capital paths. \textbf{(a)}~Vault-funded: the vault transfers principal directly; no external venue, no hedging buffer. \textbf{(b)}~Externally-sourced: the CDP borrows from the external venue; the vault commits only hedging capital (dashed).}
+  \caption{Capital paths. \textbf{(a)}~Vault-funded: the vault transfers principal directly and captures the full fixed-rate spread; no external venue, no hedging buffer. \textbf{(b)}~Liquidity-forwarding: the CDP borrows from the external venue; the vault commits only hedging capital (dashed), achieving $\sim$20:1 leverage.}
   \label{fig:capital}
 \end{figure}
 
 \subsection{Capital Efficiency}
 
-The risk engine sizes both buffers at quote time: the rate buffer from tail simulations of variable-rate paths, the option buffer from simulated round-trip swap execution against on-chain pool depth.
+Both buffers on the liquidity-forwarding path are sized at quote time by the provable risk engine (Section~\ref{sec:risk}): the rate buffer from tail simulations of variable-rate paths, the collateral conversion reserve from simulated round-trip execution costs. The vault's capital leverage on a single loan is
+\begin{equation}
+  \kappa = \frac{P}{B_{\mathrm{rate}} + B_{\mathrm{conv}}},
+  \label{eq:leverage}
+\end{equation}
+where $P$ is the loan principal and $B_{\mathrm{rate}} + B_{\mathrm{conv}}$ is the total hedging capital committed. On the vault-funded path $\kappa = 1$ (the vault commits the full principal); on the liquidity-forwarding path $\kappa \gg 1$.
 
-Consider two scenarios for a \$500,000 loan backed by WETH collateral at 70\% LTV:
-
-\textbf{Vault-funded.} The vault transfers \$350,000 USDC directly to the borrower. Capital committed: \$350,000 at 1:1. The vault earns the full 8\% fixed rate on that principal, approximately \$6,900 over a 90-day term.
-
-\textbf{Externally-sourced.} The external venue supplies the \$350,000 principal. The vault reserves \$17,500 as a rate buffer (5\% of principal), approximately \textbf{20:1 capital leverage}. The vault earns the buffer surplus: the difference between the reserved \$17,500 and the realized variable-rate cost, typically \$3,000--\$8,000 over a 90-day term.
+On a \$350{,}000 USDC loan, the vault-funded path commits the full principal at $\kappa = 1$. The liquidity-forwarding path reserves only ${\sim}$5\% as a rate buffer, achieving $\kappa \approx 20$---the external venue supplies the principal while the vault commits \$17{,}500. The blend between paths depends on vault capacity and market demand.
 
 At close, buffer surplus remains in the vault as LP yield; buffer shortfall reduces vault NAV.

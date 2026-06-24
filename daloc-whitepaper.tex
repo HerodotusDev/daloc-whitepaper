@@ -4,23 +4,26 @@
 \begin{document}
 
 % --- Title page ---
+\hypersetup{pageanchor=false}
 \begin{titlepage}
   \centering
   \vspace*{4cm}
 
   {\Huge\bfseries \daloc\par}
   \vspace{0.8cm}
-  {\Large A Cross-Chain Prime Brokerage Platform\\for Collateralized Credit\par}
+  {\Large A Cross-Chain Prime Brokerage Protocol\\for Collateralized Credit\par}
 
   \vspace{2.5cm}
 
   \noindent
-  \begin{tabular}[t]{@{}c@{\hspace{4em}}c@{}}
-    {\large Bartosz Nowak} & {\large Marcello Bardus} \\[0.4em]
+  \begin{tabular}[t]{@{}c@{\hspace{1.5em}}c@{\hspace{1.5em}}c@{}}
+    {\large Bartosz Nowak} & {\large Marcello Bardus} & {\large Jamil Bouhdada} \\[0.4em]
     {\normalsize \href{mailto:bartosz@herodotus.dev}{bartosz@herodotus.dev}} &
-    {\normalsize \href{mailto:marcello@herodotus.dev}{marcello@herodotus.dev}} \\[0.3em]
+    {\normalsize \href{mailto:marcello@herodotus.dev}{marcello@herodotus.dev}} &
+    {\normalsize \href{mailto:jamil@herodotus.dev}{jamil@herodotus.dev}} \\[0.3em]
     {\normalsize \href{https://x.com/bartolomeo_diaz}{@bartolomeo\_diaz}} &
-    {\normalsize \href{https://x.com/0xmarcello}{@0xmarcello}}
+    {\normalsize \href{https://x.com/0xmarcello}{@0xmarcello}} &
+    {}
   \end{tabular}
 
   \vspace{1.8cm}
@@ -28,19 +31,25 @@
 
   \vfill
 \end{titlepage}
+\hypersetup{pageanchor=true}
 
 % --- Body ---
 \input{sections/00-abstract}
+
+\setcounter{tocdepth}{2}
+\tableofcontents
+\newpage
+
 \input{sections/01-introduction}
 \input{sections/02-products}
 \input{sections/03-architecture}
-\input{sections/09-settlement}
-\input{sections/05-lifecycle}
 \input{sections/04-capital}
-\input{sections/10-tokens}
+\input{sections/05-lifecycle}
 \input{sections/06-liquidity-providers}
 \input{sections/07-risk}
 \input{sections/08-crosschain}
+\input{sections/09-settlement}
+\input{sections/10-tokens}
 \input{sections/12-governance}
 \input{sections/11-discussion}
 

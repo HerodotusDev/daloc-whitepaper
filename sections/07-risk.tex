@@ -1,36 +1,94 @@
 \section{Risk Quantification}
 \label{sec:risk}
 
-The preceding sections defined the risk channels (Table~\ref{tab:risk}); this section describes how the risk engine sizes each loan's parameters before capital is deployed.
+The Harvest Vault's mandate (Section~\ref{sec:lp}) sets the outer boundaries---collateral classes, LTV ceilings, rate floors, concentration caps. The risk engine sets the per-loan terms \emph{within} those boundaries. This section specifies how \daloc{} converts risk channels (Table~\ref{tab:risk}) into loan-level loss distributions, underwriting terms, and liquidation-assurance commitments before capital is deployed. Each loan is treated as a collateralized credit instrument and each vault or Risk House as a portfolio of contingent claims; volatility or liquidation probability alone is not a sufficient proxy for lender risk~\cite{gudgeon2020,merton1974,szpruch2024,zbandut2026}.
+
+\subsection{Risk Objective and Loss Definition}
+
+The risk engine constrains economic loss to the lender, the Harvest Vault, and any designated liquidation backstop under both ordinary and stressed conditions. A liquidation event is not itself a default: a position may be liquidated without lender loss if the debt is repaid in full, while lender loss can arise when liquidation is delayed, market depth is insufficient, or funding and settlement costs exhaust the loan's reserves~\cite{perez2021,qin2021,sadeghi2026,zbandut2026}.
+
+For each loan, the gross economic loss is the gap between the exposure at close-out---contractual debt, accrued obligations, and settlement costs---and pre-recovery proceeds from repayments, collateral, and loan-specific reserves:
+\begin{equation}
+  L^{\mathrm{gross}}_i = \max\!\bigl(\EAD_i(\rho_i) - R^{\mathrm{pre}}_i(\rho_i),\; 0\bigr).
+  \label{eq:grossloss}
+\end{equation}
+
+If loan~$i$ is covered by Risk House~$h$ with an enforceable liquidation-assurance commitment~$A_{h,i}$, the House payout and residual lender loss are
+\begin{align}
+  L^{\mathrm{house}}_i &= \min\!\bigl(L^{\mathrm{gross}}_i,\; A_{h,i}\bigr), \label{eq:housepayout} \\
+  L^{\mathrm{net}}_i   &= \max\!\bigl(L^{\mathrm{gross}}_i - A_{h,i},\; 0\bigr). \label{eq:netloss}
+\end{align}
+A loan can be liquidated successfully without lender loss when recovery covers the debt; a Risk House absorbs the shortfall up to its commitment; residual loss, if any, falls to the vault.
+
+The model separately reports liquidation probability, loss probability, and loss given default, distinguishing a mechanically successful liquidation from an economic loss event. At portfolio level, losses are aggregated under the same joint scenario, preserving dependence through common market, liquidity, oracle, funding, and operational shocks. Expected shortfall is used as the primary tail-risk measure because it captures severity beyond a quantile and supports portfolio aggregation and constrained optimization~\cite{artzner1999,rockafellar2000}. The confidence level~$\alpha$, liquidation horizon, and stress set are disclosed by each Risk House and bounded by the \daloc{} Risk Kernel.
 
 \subsection{Dynamic Underwriting}
 
-Every loan quote must bound the lender's loss before capital is deployed. The risk engine evaluates each collateral asset dynamically --- accepting, rejecting, or adjusting parameters --- and continuously re-evaluates existing positions. Inputs include liquidity conditions (depth and slippage at trade size), non-quantitative dimensions (smart contract, issuer, and infrastructure risk), and venue conditions for Prime Trade. Maximum borrow, fixed rate, and liquidation thresholds are \emph{outputs of the model}, not static protocol parameters.
+Every quote is produced from the current state of the collateral, principal asset, funding path, liquidation venues, and existing portfolio. The quote specifies at least
+\begin{equation}
+  q_i = \bigl(N_i,\, \lambda_i,\, \theta_i,\, r_i,\, T_i,\, B_i,\, h_i,\, \pi_{h_i}\bigr),
+  \label{eq:quote}
+\end{equation}
+where $N_i$ (gross principal), $\lambda_i$ (origination LTV), and $\theta_i$ (liquidation threshold) define the position; $r_i$ (fixed rate) and $T_i$ (term) define the economics; $B_i$ (reserve vector) sizes the hedging; and $h_i$, $\pi_{h_i}$ identify the designated Risk House and its policy hash.
 
-\subsection{Methodology}
+Principal limits, rate, liquidation threshold, reserve sizing, and admissibility are outputs of the underwriting process, not protocol constants. Fixed contractual terms are not repriced ex~post; a deterioration in risk may trigger a top-up request, refinancing, or liquidation according to the market's pre-committed rules.
 
-The risk engine follows a three-stage pipeline: data collection, statistical modeling, and simulation.
+\subsection{Scenario Generation}
 
-\textbf{Data collection.} The engine ingests live on-chain state (asset prices, lending-venue utilization rates, liquidity-pool depth, and historical return series) directly from the chains where collateral and principal reside.
+Risk is estimated under the real-world probability measure because the objective is capital adequacy, not only no-arbitrage valuation. The scenario generator reproduces volatility clustering, jumps, heavy tails, and the tendency of liquidity, funding rates, and operational latency to worsen together during stress~\cite{castro2021,chiu2023,gudgeon2020,heimbach2023,tovanich2023}. Challenger models run in parallel; parameter uncertainty is converted into conservative add-ons.
 
-\textbf{Statistical modeling.} Collected data feeds models that estimate the current volatility regime, tail-risk characteristics, and correlation structure, capturing asymmetric downside behavior and discontinuous price events.
+Each simulated path replays the actual loan cash-flow logic---accrual, liquidation detection, epoch delay, and recovery---producing a distribution of economic loss, not merely of collateral prices. Recovery is modeled as endogenous to trade size, venue depth, and liquidator economics~\cite{perez2021,qin2021,sadeghi2026,tian2025}. For liquidity-forwarding loans, the simulation jointly tracks both \daloc{} and venue liquidation thresholds, sizing reserves so that the protocol's two-epoch liquidation completes before the venue's instant trigger fires.
 
-\textbf{Simulation.} Monte Carlo simulations project collateral prices and variable-rate funding costs over the loan horizon. Simulated paths are evaluated against the loan's liquidation barriers and mechanics (partial versus full close, bonuses, slippage), producing a distribution of liquidation probability and loss given default.
+\subsection{Provable Risk Engine}
+\label{subsec:provable-engine}
+
+The risk engine separates computation into two layers: a \emph{precomputation kernel} that encodes the heavy Monte Carlo output, and a \emph{serving path} that answers individual quotes---with the serving path producing a zero-knowledge proof of correct computation.
+
+\paragraph{Precomputation kernel.} Simulation results are materialized into a multi-dimensional tensor---the \emph{risk kernel}---indexed by market-driven and loan-level parameters (volatility regime, LTV, rate, term). Each cell stores break-even quantities (liquidation probability, loss quantiles, reserve requirements) at which the protocol's expected net loss is zero. Only the computationally heaviest quantities reside in the kernel; all remaining quote parameters are derived in the serving path. Recomputation happens periodically from fresh market data; between updates, the same kernel serves all quotes for a given collateral--principal pair.
+
+\paragraph{Serving path.} When a borrower requests a quote, the serving layer maps the request into the kernel's parameter space and searches for the optimal $(\lambda_i,\theta_i,r_i,B_i)$ that satisfies the borrower's intent while remaining break-even or better for the lender. Interpolation over the discrete grid yields a continuous surface; optimization proceeds over it without Monte Carlo at serving time, reducing latency by orders of magnitude. Dedicated kernels serve rate-buffer and collateral-conversion-reserve sizing using the same procedure.
+
+\paragraph{ZK provability.} The serving computation---kernel lookup, interpolation, and optimization---is deterministic given the kernel snapshot and borrower parameters. \daloc{} produces a zero-knowledge proof attesting that the quote was correctly derived from the declared kernel hash and risk policy. Settlement contracts verify this proof alongside the market's state-transition fact, ensuring that not only the executed loan terms but the underwriting logic that produced them is cryptographically auditable. Kernel precomputation, which involves stochastic Monte Carlo simulation, sits outside the proof boundary; what is proven is the deterministic path from a committed kernel to a specific quote.
+\subsection{Funding and Execution Reserves}
+
+For liquidity-forwarding loans, the engine sizes separate reserves for funding mismatch and execution cost. The rate buffer covers the expected shortfall of the maximum pathwise funding deficit over the loan term; the collateral conversion reserve covers stressed round-trip execution costs. Both are calibrated jointly so that a collateral crash, higher utilization, thinner liquidity, and longer settlement delay can occur in the same path~\cite{bastankhah2024b,baude2025,chitra2023,nadkarni2025}.
 
 \subsection{Pricing}
 
-The published LTV and rate are chosen jointly to balance expected return and incremental tail risk given the existing book.
+Each quote is priced from expected gross credit loss, the incremental tail capital consumed by each balance sheet in the loss waterfall, expected hedging costs, and operating costs~\cite{baude2025,halpern2024,szpruch2024}. Each Risk House optimizes its own objective within constraints set by the \daloc{} Risk Kernel and its published policy; quote competition selects the best compatible terms among feasible offers.
 
-Higher volatility or longer duration lowers the LTV; adding correlated exposure to a concentrated book raises the rate. Positions that reduce aggregate tail risk receive more favorable terms, incentivizing diversification. The rate never falls below the risk-free return plus the simulated expected loss per dollar lent. With collateral quantity $C$, spot price $S_0$, LTV ratio $\lambda$, and origination fee $\phi$, the maximum borrow is:
+For a single linear collateral asset with quantity~$C_i$ and spot price~$S_t$, the indicative liquidation barrier is
 \begin{equation}
-  L = C \cdot S_0 \cdot \lambda \cdot (1 - \phi)
-  \label{eq:maxborrow}
-\end{equation}
-With annualized rate $r$ and horizon $T$ in years, debt at maturity is $D = L(1 + rT)$. The liquidation barrier --- the spot price at which the health factor (Equation~\ref{eq:healthfactor}) breaches~1 --- is:
-\begin{equation}
-  S_{\mathit{liq}} = \frac{D}{C \cdot \theta}
+  S^{\mathrm{liq}}_i(t) = \frac{D_i(t)}{C_i\,\theta_i}.
   \label{eq:liqbarrier}
 \end{equation}
-where $\theta$ is the liquidation threshold. The simulated probability that the collateral price path reaches $S_{\mathit{liq}}$ over the loan's horizon feeds directly into the quoted rate.
+For multi-asset, yield-bearing, or option collateral, no single spot barrier is sufficient; the engine solves $\HF_i(t) = 1$ using full portfolio revaluation.
 
-For externally-sourced loans, the rate buffer is sized separately, covering the tail of simulated variable-rate paths on the external venue. The borrower's obligation remains the linear formula above regardless of sourcing path.
+\subsection{Portfolio Aggregation and Concentration Risk}
+
+Each new loan is assessed against the existing book, not on a standalone basis. Concentration limits cover counterparty, asset, venue, infrastructure, and cross-dependency dimensions. The engine measures wrong-way risk: cases in which collateral falls while funding rates, liquidation costs, or the probability of venue failure rise. Diversification credit is recognized only when offsets remain legally and operationally available through the same close-out process~\cite{chitra2025,gordy2003,zbandut2025}.
+
+\subsection{Risk Houses and Liquidation Assurance}
+
+A Risk House is an independently capitalized entity that underwrites loans and backstops liquidations. Registration is permissionless; each House publishes its admissible collateral, pricing method, LTV and tenor limits, reserve rules, concentration limits, and liquidation route as a policy commitment~$\pi_h$. Every quote identifies the House whose capital stands behind it.
+
+Access to shared Harvest Vault capital or a \daloc{}-standard designation requires compliance with the protocol-wide Risk Kernel (Section~\ref{subsec:provable-engine}). A compliant House may be stricter than the kernel but not weaker: the kernel enforces upper bounds on LTV, lower bounds on reserves, and maximum liquidation latency. Each covered loan carries an assurance commitment sized to the expected shortfall of the liquidation gap under tail and stress scenarios; capital supporting multiple loans is modeled jointly.
+
+The default waterfall is:
+\begin{enumerate}
+  \item borrower repayments and collateral value;
+  \item loan-specific funding and execution reserves;
+  \item permissionless liquidation or competitive auction;
+  \item loan-specific Risk House assurance commitment;
+  \item Risk House general first-loss capital and vested fee escrow;
+  \item any narrowly defined \daloc{} catastrophe layer;
+  \item residual lender or vault impairment.
+\end{enumerate}
+
+Public liquidators receive the first execution window; the Risk House acts as committed buyer only if that route fails. Normal underwriting losses consume House capital; slashing is reserved for mandate violations, false proofs, or failure to honor a committed backstop~\cite{arnsdorf2012,chitra2025,cont2014,duffie2011,qin2023,zbandut2025}. \daloc{} may operate a canonical Risk House, but the core protocol does not mutualize the routine losses of every third-party House.
+
+\subsection{Operational Risk and Model Governance}
+
+Market and funding risks are estimated probabilistically where sufficient data exist. Sparse infrastructure failures---smart-contract, bridge, oracle, chain-halt, proof-system---are controlled through deterministic scenarios, exposure caps, and conservative add-ons rather than spuriously precise event frequencies.
+
+Each quote records the data snapshot, model hash, and calibration window used to produce it. Recalibration is triggered when realized conditions deviate materially from model assumptions. Governance and infrastructure risks are disclosed separately: correct execution, prudent parameter setting, and adequate capital are distinct risk questions~\cite{bartoletti2025,zbandut2026}.

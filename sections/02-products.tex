@@ -1,15 +1,16 @@
 \section{Products}
+\label{sec:products}
+
+All three products share a single protocol layer---the Harvest Vault, order book, settlement pipeline, and risk engine---extensible to new products without modifying core contracts.
 
 \subsection{Borrow}
 
-Borrow lets a user lock collateral on one chain and receive a fixed-rate, fixed-term loan on another. Rate, fee, and total repayment are quoted upfront and locked for the life of the loan. Collateral stays on its home chain and continues accruing native yield---no bridging or unstaking required.
+A holder of any supported token borrows against it at a fixed rate for a fixed term. Collateral stays on its home chain and continues accruing native yield. Loan-to-value ratio, rate, and term are determined per loan through solver competition (Section~\ref{sec:architecture}). Origination, interest accrual, and liquidation are each governed by zero-knowledge programs, ensuring that no single trusted party controls the loan's lifecycle.
 
 \subsection{Prime Trade}
 
-Prime Trade is \daloc{}'s prime brokerage product: credit origination for holders of yield-bearing assets on Ethereum, Arbitrum, or Base who want perpetual exposure on Hyperliquid~\cite{hyperliquid} without giving up the underlying.
-
-The conventional path requires unstaking, bridging, and depositing---giving up yield and taking on bridging risk. Prime Trade keeps the collateral where it is: the borrower pledges it and the platform opens a fixed-rate credit line routed directly to the trading venue. The borrower never holds the borrowed capital; protocol-controlled margin agents restrict funds to perpetual trading only---withdrawals, spot transfers, and external lending are blocked. \daloc{} takes no directional exposure; it earns from lending spread and builder fees.
+A borrower draws a USDC credit line and routes it to a per-loan margin agent on HyperEVM, gaining leveraged perpetual exposure without selling the underlying collateral (Section~\ref{sec:crosschain}). The margin agent restricts capital to approved operations---trading only, no withdrawals---so the lender's risk depends on programmatic constraints, not borrower discretion. Combined with liquidity-forwarding origination, the product compounds venue leverage on top of the borrowing LTV, controlling large notional with modest collateral.
 
 \subsection{Earn}
 
-Earn gives liquidity providers passive fixed-rate yield. Capital deposited into the Harvest Vault is deployed into loans by an operator whose strategy is bounded by a publicly auditable mandate, verified per-epoch by zero-knowledge proof (Section~\ref{sec:lp}).
+Liquidity providers deposit USDC into the Harvest Vault, where an operator deploys capital into fixed-rate loans originated through the protocol's order book---either funding loan principal directly, or providing hedging buffers when loans are sourced through external venues (Section~\ref{sec:capital}). The operator's strategy is bounded by a publicly auditable mandate and verified per-epoch by zero-knowledge proof (Section~\ref{sec:lp}); the operator's fee is released only upon valid attestation. Yield derives from the full fixed-rate coupon on vault-funded loans and the hedging-buffer surplus on liquidity-forwarding loans. Withdrawal is epoch-based with a settlement delay.
