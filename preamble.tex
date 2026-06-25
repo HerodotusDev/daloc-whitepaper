@@ -32,6 +32,13 @@
 \usepackage[dvipsnames]{xcolor}
 \usepackage{tikz}
 \usetikzlibrary{arrows.meta,positioning,calc}
+\tikzset{
+  box/.style={draw, semithick, rounded corners=4pt, fill=gray!8,
+  minimum height=1.1cm, minimum width=2.5cm, align=center, font=\small\sffamily},
+  arr/.style={-{Stealth[length=7pt]}, semithick},
+  lab/.style={font=\footnotesize\sffamily, fill=white, inner sep=2pt},
+  sub/.style={font=\small\sffamily\bfseries}
+}
 
 % --- Tables ---
 \usepackage{booktabs}

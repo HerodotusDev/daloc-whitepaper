@@ -15,21 +15,16 @@ A borrower posts a request, solvers respond with quotes, and the accepted quote 
 
 \begin{figure}[ht]
   \centering
-  \begin{tikzpicture}[
-      box/.style={draw, thick, rounded corners=3pt, fill=gray!12,
-      minimum height=1.2cm, minimum width=2.8cm, align=center, font=\small\sffamily},
-      arr/.style={-{Stealth[length=9pt]}, thick},
-      lab/.style={font=\small\sffamily, fill=white, inner sep=3pt}
-    ]
-    \node[box] (B)   at (0,0)      {Borrower};
-    \node[box] (CDP) at (0,-2.5)   {CDP};
-    \node[box] (AV)  at (0,-5)     {Ext.\ Venue};
-    \node[box] (V)   at (4.5,-2.5) {Vault};
+  \begin{tikzpicture}
+    \node[box] (B)   at (0,0)    {Borrower};
+    \node[box] (CDP) at (0,-2.5) {CDP};
+    \node[box] (AV)  at (0,-5)   {Ext.\ Venue};
+    \node[box] (V)   at (5,-2.5) {Vault};
 
-    \draw[arr] ([xshift=-10pt]B.south) -- node[lab,left]{1.\ WETH} ([xshift=-10pt]CDP.north);
-    \draw[arr] ([xshift=10pt]CDP.north) -- node[lab,right]{4.\ USDC} ([xshift=10pt]B.south);
-    \draw[arr] ([xshift=-10pt]CDP.south) -- node[lab,left]{2.\ supply} ([xshift=-10pt]AV.north);
-    \draw[arr] ([xshift=10pt]AV.north) -- node[lab,right]{3.\ USDC} ([xshift=10pt]CDP.south);
+    \draw[arr] ([xshift=-14pt]B.south) -- node[lab,left]{1.\ WETH} ([xshift=-14pt]CDP.north);
+    \draw[arr] ([xshift=14pt]CDP.north) -- node[lab,right]{4.\ USDC} ([xshift=14pt]B.south);
+    \draw[arr] ([xshift=-14pt]CDP.south) -- node[lab,left]{2.\ supply} ([xshift=-14pt]AV.north);
+    \draw[arr] ([xshift=14pt]AV.north) -- node[lab,right]{3.\ USDC} ([xshift=14pt]CDP.south);
     \draw[arr] (CDP) -- node[lab,above]{5.\ debt tokens} (V);
   \end{tikzpicture}
   \caption{Origination, liquidity-forwarding pipeline. Steps 1--4 execute as a single atomic hook chain. Debt tokens (step~5) are minted to the vault; the rate buffer is escrowed. Vault-funded origination omits the external venue and transfers principal directly.}
@@ -63,41 +58,34 @@ Because each loan is isolated, bad debt cannot cascade across positions. Shortfa
 
 \begin{figure}[ht]
   \centering
-  \begin{tikzpicture}[
-      box/.style={draw, thick, rounded corners=3pt, fill=gray!12,
-      minimum height=1.1cm, minimum width=2.5cm, align=center, font=\small\sffamily},
-      arr/.style={-{Stealth[length=9pt]}, thick},
-      lab/.style={font=\footnotesize\sffamily, fill=white, inner sep=2pt},
-      sub/.style={font=\small\sffamily\bfseries},
-      chain/.style={font=\footnotesize\sffamily\itshape, text=gray!50}
-    ]
+  \begin{tikzpicture}
     % --- Column (a) Originate ---
-    \node[sub] at (-4.3,1) {(a) Originate};
-    \node[chain] at (-4.3,0.5) {Ethereum};
+    \node[sub] at (-4.3,1.15) {\shortstack{(a) Originate\\[2pt]%
+    {\scriptsize\mdseries\color{black!45}Ethereum}}};
     \node[box] (a1) at (-4.3,0)    {Borrower};
-    \node[box] (a2) at (-4.3,-1.7) {CDP};
-    \node[box] (a3) at (-4.3,-3.4) {Ext.\ Venue};
-    \node[box] (a4) at (-4.3,-5.1) {CCTP};
+    \node[box] (a2) at (-4.3,-1.8) {CDP};
+    \node[box] (a3) at (-4.3,-3.6) {Ext.\ Venue};
+    \node[box] (a4) at (-4.3,-5.4) {CCTP};
     \draw[arr] (a1) -- node[lab,right]{ETH} (a2);
     \draw[arr] (a2) -- node[lab,right]{supply} (a3);
     \draw[arr] (a3) -- node[lab,right]{USDC} (a4);
 
     % --- Column (b) Active ---
-    \node[sub] at (0,1) {(b) Active};
-    \node[chain] at (0,0.5) {HyperEVM};
+    \node[sub] at (0,1.15) {\shortstack{(b) Active\\[2pt]%
+    {\scriptsize\mdseries\color{black!45}HyperEVM}}};
     \node[box] (b1) at (0,0)    {Margin Agent};
-    \node[box] (b2) at (0,-1.7) {HyperCore};
-    \node[box] (b3) at (0,-3.4) {Borrower};
+    \node[box] (b2) at (0,-1.8) {HyperCore};
+    \node[box] (b3) at (0,-3.6) {Borrower};
     \draw[arr] (b1) -- node[lab,right]{deposit} (b2);
     \draw[arr,dashed] (b3) -- node[lab,right]{trades} (b2);
 
     % --- Column (c) Close ---
-    \node[sub] at (4.3,1) {(c) Close};
-    \node[chain] at (4.3,0.5) {HyperEVM $\to$ Ethereum};
+    \node[sub] at (4.3,1.15) {\shortstack{(c) Close\\[2pt]%
+    {\scriptsize\mdseries\color{black!45}HyperEVM $\to$ Ethereum}}};
     \node[box] (c1) at (4.3,0)    {HyperCore};
-    \node[box] (c2) at (4.3,-1.7) {CCTP};
-    \node[box] (c3) at (4.3,-3.4) {Ext.\ Venue};
-    \node[box] (c4) at (4.3,-5.1) {Borrower};
+    \node[box] (c2) at (4.3,-1.8) {CCTP};
+    \node[box] (c3) at (4.3,-3.6) {Ext.\ Venue};
+    \node[box] (c4) at (4.3,-5.4) {Borrower};
     \draw[arr] (c1) -- node[lab,right]{USDC} (c2);
     \draw[arr] (c2) -- node[lab,right]{repay} (c3);
     \draw[arr] (c3) -- node[lab,right]{ETH} (c4);
