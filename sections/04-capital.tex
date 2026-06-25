@@ -13,31 +13,25 @@ When vault idle capital is insufficient (because existing deployments have consu
 
 \begin{figure}[ht]
   \centering
-  \begin{tikzpicture}[
-      box/.style={draw, thick, rounded corners=3pt, fill=gray!12,
-      minimum height=1.2cm, minimum width=2.8cm, align=center, font=\small\sffamily},
-      arr/.style={-{Stealth[length=9pt]}, thick},
-      lab/.style={font=\small\sffamily, fill=white, inner sep=3pt},
-      sub/.style={font=\small\sffamily\bfseries}
-    ]
+  \begin{tikzpicture}
     % --- (a) Vault-Funded ---
-    \node[sub] at (0,1) {(a) Vault-Funded: full spread};
+    \node[sub] at (0,0.8) {(a) Vault-Funded};
     \node[box] (V1) at (-2.5,0) {Vault};
     \node[box] (B1) at (2.5,0)  {Borrower};
     \draw[arr] (V1) -- node[lab,above]{USDC} (B1);
 
     % --- (b) Liquidity-Forwarding ---
-    \node[sub] at (0,-1.8) {(b) Liquidity-Forwarding: ${\sim}$20:1 leverage};
-    \node[box] (V2) at (-4,-3)    {Vault};
-    \node[box] (CM) at (0,-3)     {CDP};
-    \node[box] (AV) at (0,-4.8)   {Ext.\ Venue};
-    \node[box] (B2) at (0,-6.6)   {Borrower};
+    \node[sub] at (0,-1.5) {(b) Liquidity-Forwarding};
+    \node[box] (V2) at (-3.8,-2.7) {Vault};
+    \node[box] (CM) at (0,-2.7)    {CDP};
+    \node[box] (AV) at (0,-4.2)    {Ext.\ Venue};
+    \node[box] (B2) at (0,-5.7)    {Borrower};
 
     \draw[arr,dashed] (V2) -- node[lab,above]{buffer} (CM);
     \draw[arr] (CM) -- node[lab,right]{collateral} (AV);
     \draw[arr] (AV) -- node[lab,right]{USDC} (B2);
   \end{tikzpicture}
-  \caption{Capital paths. \textbf{(a)}~Vault-funded: the vault transfers principal directly and captures the full fixed-rate spread; no external venue, no hedging buffer. \textbf{(b)}~Liquidity-forwarding: the CDP borrows from the external venue; the vault commits only hedging capital (dashed), achieving $\sim$20:1 leverage.}
+  \caption{Capital paths. \textbf{(a)}~Vault-funded: the vault transfers principal directly and captures the full fixed-rate spread. \textbf{(b)}~Liquidity-forwarding: the CDP borrows from the external venue; the vault commits only hedging capital (dashed), achieving ${\sim}$20:1 leverage.}
   \label{fig:capital}
 \end{figure}
 
