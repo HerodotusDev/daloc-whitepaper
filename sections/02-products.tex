@@ -1,7 +1,7 @@
 \section{Products}
 \label{sec:products}
 
-All three products share a single protocol layer---the Harvest Vault, order book, settlement pipeline, and risk engine---extensible to new products without modifying core contracts.
+All three products share a single protocol layer (the Harvest Vault, order book, settlement pipeline, and risk engine), extensible to new products without modifying core contracts.
 
 \subsection{Borrow}
 
@@ -9,8 +9,8 @@ A holder of any supported token borrows against it at a fixed rate for a fixed t
 
 \subsection{Prime Trade}
 
-A borrower draws a USDC credit line and routes it to a per-loan margin agent on HyperEVM, gaining leveraged perpetual exposure without selling the underlying collateral (Section~\ref{sec:crosschain}). The margin agent restricts capital to approved operations---trading only, no withdrawals---so the lender's risk depends on programmatic constraints, not borrower discretion. Combined with liquidity-forwarding origination, the product compounds venue leverage on top of the borrowing LTV, controlling large notional with modest collateral.
+A borrower draws a USDC credit line and routes it to a per-loan margin agent on HyperEVM, gaining leveraged perpetual exposure without selling the underlying collateral (Section~\ref{sec:crosschain}). The margin agent restricts capital to approved operations (trading only, no withdrawals), so the lender's risk depends on programmatic constraints, not borrower discretion. Combined with liquidity-forwarding origination, the product compounds venue leverage on top of the borrowing LTV, controlling large notional with modest collateral.
 
 \subsection{Earn}
 
-Liquidity providers deposit USDC into the Harvest Vault, where an operator deploys capital into fixed-rate loans originated through the protocol's order book---either funding loan principal directly, or providing hedging buffers when loans are sourced through external venues (Section~\ref{sec:capital}). The operator's strategy is bounded by a publicly auditable mandate and verified per-epoch by zero-knowledge proof (Section~\ref{sec:lp}); the operator's fee is released only upon valid attestation. Yield derives from the full fixed-rate coupon on vault-funded loans and the hedging-buffer surplus on liquidity-forwarding loans. Withdrawal is epoch-based with a settlement delay.
+Liquidity providers deposit USDC into the Harvest Vault, where an operator deploys capital into fixed-rate loans originated through the protocol's order book, either funding loan principal directly or providing hedging buffers when loans are sourced through external venues (Section~\ref{sec:capital}). The operator's strategy is bounded by a publicly auditable mandate and verified per-epoch by zero-knowledge proof (Section~\ref{sec:lp}); the operator's fee is released only upon valid attestation. Yield derives from the full fixed-rate coupon on vault-funded loans and the hedging-buffer surplus on liquidity-forwarding loans. Withdrawal is epoch-based with a settlement delay.
