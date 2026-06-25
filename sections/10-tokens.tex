@@ -1,7 +1,7 @@
-\section{Position Tokens and Secondary Markets}
+\section{Position Tokens}
 \label{sec:tokens}
 
-Each funded loan produces a tokenized position representing the lender's claim---carrying accrual, enforcing solvency rules, and trading on secondary markets without protocol modification.
+Each funded loan produces a tokenized position that represents the lender's claim, carries accrual, and enforces solvency rules as a transferable ERC-20.
 
 \subsection{Debt Tokens}
 
@@ -10,7 +10,7 @@ Each funded loan issues a transferable ERC-20 whose face value is one unit of th
   v = 1 + I_{\mathrm{cum}},
   \label{eq:debtprice}
 \end{equation}
-where $I_{\mathrm{cum}}$ is the cumulative interest accrued per token, rising as interest is verified. Interest accrues linearly---simple interest, not compound---so the borrower's total obligation at maturity for principal~$P$ over term~$T$ is
+where $I_{\mathrm{cum}}$ is the cumulative interest accrued per token, rising as interest is verified. Interest accrues linearly (simple interest, not compound), so the borrower's total obligation at maturity for principal~$P$ over term~$T$ is
 \begin{equation}
   D = P\!\left(1 + r\,\frac{T}{T_{\mathrm{year}}}\right),
   \label{eq:totaldebt}
@@ -31,14 +31,4 @@ A strict accounting identity holds at all times, ensuring no principal, interest
 \end{equation}
 where $R_{\mathrm{principal}}$ is the redeemable principal reserve, $R_{\mathrm{interest}}$ the interest reserve, $F_{\mathrm{protocol}}$ the accrued protocol fees, and $B_{\mathrm{token}}$ the contract's token balance. Redemptions are blocked until interest for the latest period is accrued, preventing exits at a stale index. A loan can be marked closed only when accrual is current and the principal reserve covers all outstanding tokens.
 
-Debt tokens from criteria-restricted markets carry transfer-time criteria (e.g.\ ``KYC tier~$\geq$~2'') enforced at the hub-routed transfer step, ensuring restrictions persist after origination. When the Harvest Vault is creditor, vault shares (Section~\ref{sec:lp}) reflect the aggregate claim value across all held debt tokens.
-
-\subsection{Secondary Markets}
-
-A fixed-rate, fixed-term lender who needs liquidity before maturity cannot ask the borrower to repay---the secondary market is the exit. Debt tokens are standard ERC-20, tradeable on any venue without protocol modification.
-
-\textbf{Claim value versus market price.} The claim value (Equation~\ref{eq:debtprice}) is what the holder receives on redemption at maturity. The market price is what a buyer pays today. These diverge whenever the buyer's required yield differs from the loan's coupon---whether from rate movements, changed credit perception, or an illiquidity discount. When market yield exceeds the coupon, the token trades below claim value; the spread between market yield and coupon is the observable credit signal.
-
-\textbf{Credit-risk price discovery.} Two loans with identical face value can trade at different prices reflecting divergent default expectations---the on-chain analog of a credit spread. Pool-based lending obscures this signal because every position earns the same rate. Each loan's distinct token~\cite{midnight2025} enables granular risk transfer. Debt tokens of different tenors against the same collateral, trading simultaneously, produce an observable term structure---an on-chain yield curve for collateralized credit.
-
-\textbf{Per-loan versus fungible.} Fungible pools average away credit differences; per-loan tokens preserve them. A holder can sell exposure to a single borrower without unwinding an entire portfolio position. This granularity is necessary for any institutional secondary market where counterparty-level risk matters.
+Debt tokens from criteria-restricted markets carry transfer-time criteria (e.g.\ ``KYC tier~$\geq$~2'') enforced at the hub-routed transfer step, ensuring restrictions persist after origination. When the Harvest Vault is creditor, vault shares (Section~\ref{sec:lp}) reflect the aggregate claim value across all held debt tokens. Debt tokens are standard ERC-20; transferability enables position exit before maturity without requiring protocol modification.
