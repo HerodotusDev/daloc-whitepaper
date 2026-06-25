@@ -1,13 +1,13 @@
 \section{Risk Quantification}
 \label{sec:risk}
 
-The Harvest Vault's mandate (Section~\ref{sec:lp}) sets the outer boundaries---collateral classes, LTV ceilings, rate floors, concentration caps. The risk engine sets the per-loan terms \emph{within} those boundaries. This section specifies how \daloc{} converts risk channels (Table~\ref{tab:risk}) into loan-level loss distributions, underwriting terms, and liquidation-assurance commitments before capital is deployed. Each loan is treated as a collateralized credit instrument and each vault or Risk House as a portfolio of contingent claims; volatility or liquidation probability alone is not a sufficient proxy for lender risk~\cite{gudgeon2020,merton1974,szpruch2024,zbandut2026}.
+The Harvest Vault's mandate (Section~\ref{sec:lp}) sets the outer boundaries (collateral classes, LTV ceilings, rate floors, concentration caps). The risk engine sets the per-loan terms \emph{within} those boundaries. This section specifies how \daloc{} converts risk channels (Table~\ref{tab:risk}) into loan-level loss distributions, underwriting terms, and liquidation-assurance commitments before capital is deployed. Each loan is treated as a collateralized credit instrument and each vault or Risk House as a portfolio of contingent claims; volatility or liquidation probability alone is not a sufficient proxy for lender risk~\cite{gudgeon2020,merton1974,szpruch2024,zbandut2026}.
 
 \subsection{Risk Objective and Loss Definition}
 
 The risk engine constrains economic loss to the lender, the Harvest Vault, and any designated liquidation backstop under both ordinary and stressed conditions. A liquidation event is not itself a default: a position may be liquidated without lender loss if the debt is repaid in full, while lender loss can arise when liquidation is delayed, market depth is insufficient, or funding and settlement costs exhaust the loan's reserves~\cite{perez2021,qin2021,sadeghi2026,zbandut2026}.
 
-For each loan, the gross economic loss is the gap between the exposure at close-out---contractual debt, accrued obligations, and settlement costs---and pre-recovery proceeds from repayments, collateral, and loan-specific reserves:
+For each loan, the gross economic loss is the gap between the exposure at close-out (contractual debt, accrued obligations, and settlement costs) and pre-recovery proceeds from repayments, collateral, and loan-specific reserves:
 \begin{equation}
   L^{\mathrm{gross}}_i = \max\!\bigl(\EAD_i(\rho_i) - R^{\mathrm{pre}}_i(\rho_i),\; 0\bigr).
   \label{eq:grossloss}
@@ -37,18 +37,19 @@ Principal limits, rate, liquidation threshold, reserve sizing, and admissibility
 
 Risk is estimated under the real-world probability measure because the objective is capital adequacy, not only no-arbitrage valuation. The scenario generator reproduces volatility clustering, jumps, heavy tails, and the tendency of liquidity, funding rates, and operational latency to worsen together during stress~\cite{castro2021,chiu2023,gudgeon2020,heimbach2023,tovanich2023}. Challenger models run in parallel; parameter uncertainty is converted into conservative add-ons.
 
-Each simulated path replays the actual loan cash-flow logic---accrual, liquidation detection, epoch delay, and recovery---producing a distribution of economic loss, not merely of collateral prices. Recovery is modeled as endogenous to trade size, venue depth, and liquidator economics~\cite{perez2021,qin2021,sadeghi2026,tian2025}. For liquidity-forwarding loans, the simulation jointly tracks both \daloc{} and venue liquidation thresholds, sizing reserves so that the protocol's two-epoch liquidation completes before the venue's instant trigger fires.
+Each simulated path replays actual loan cash-flow logic (accrual, liquidation detection, epoch delay, and recovery), producing a distribution of economic loss, not merely of collateral prices. Recovery is modeled as endogenous to trade size, venue depth, and liquidator economics~\cite{perez2021,qin2021,sadeghi2026,tian2025}. For liquidity-forwarding loans, reserves are sized so that the protocol's two-epoch liquidation completes before the venue's instant trigger fires.
 
 \subsection{Provable Risk Engine}
 \label{subsec:provable-engine}
 
-The risk engine separates computation into two layers: a \emph{precomputation kernel} that encodes the heavy Monte Carlo output, and a \emph{serving path} that answers individual quotes---with the serving path producing a zero-knowledge proof of correct computation.
+The risk engine separates computation into two layers: a \emph{precomputation kernel} that encodes the heavy Monte Carlo output, and a \emph{serving path} that answers individual quotes, with the serving path producing a zero-knowledge proof of correct computation.
 
-\paragraph{Precomputation kernel.} Simulation results are materialized into a multi-dimensional tensor---the \emph{risk kernel}---indexed by market-driven and loan-level parameters (volatility regime, LTV, rate, term). Each cell stores break-even quantities (liquidation probability, loss quantiles, reserve requirements) at which the protocol's expected net loss is zero. Only the computationally heaviest quantities reside in the kernel; all remaining quote parameters are derived in the serving path. Recomputation happens periodically from fresh market data; between updates, the same kernel serves all quotes for a given collateral--principal pair.
+\paragraph{Precomputation kernel.} Simulation results are materialized into a multi-dimensional tensor (the \emph{risk kernel}) indexed by market-driven and loan-level parameters (volatility regime, LTV, rate, term). Each cell stores break-even quantities (liquidation probability, loss quantiles, reserve requirements) at which the protocol's expected net loss is zero. Only the computationally heaviest quantities reside in the kernel; all remaining quote parameters are derived in the serving path. Recomputation happens periodically from fresh market data; between updates, the same kernel serves all quotes for a given collateral/principal pair.
 
 \paragraph{Serving path.} When a borrower requests a quote, the serving layer maps the request into the kernel's parameter space and searches for the optimal $(\lambda_i,\theta_i,r_i,B_i)$ that satisfies the borrower's intent while remaining break-even or better for the lender. Interpolation over the discrete grid yields a continuous surface; optimization proceeds over it without Monte Carlo at serving time, reducing latency by orders of magnitude. Dedicated kernels serve rate-buffer and collateral-conversion-reserve sizing using the same procedure.
 
-\paragraph{ZK provability.} The serving computation---kernel lookup, interpolation, and optimization---is deterministic given the kernel snapshot and borrower parameters. \daloc{} produces a zero-knowledge proof attesting that the quote was correctly derived from the declared kernel hash and risk policy. Settlement contracts verify this proof alongside the market's state-transition fact, ensuring that not only the executed loan terms but the underwriting logic that produced them is cryptographically auditable. Kernel precomputation, which involves stochastic Monte Carlo simulation, sits outside the proof boundary; what is proven is the deterministic path from a committed kernel to a specific quote.
+\paragraph{ZK provability.} The serving computation (kernel lookup, interpolation, and optimization) is deterministic given the kernel snapshot and borrower parameters. \daloc{} produces a zero-knowledge proof attesting that the quote was correctly derived from the declared kernel hash and risk policy. Settlement contracts verify this proof alongside the market's state-transition fact, ensuring that not only the executed loan terms but the underwriting logic that produced them is cryptographically auditable. Kernel precomputation, which involves stochastic Monte Carlo simulation, sits outside the proof boundary; what is proven is the deterministic path from a committed kernel to a specific quote.
+
 \subsection{Funding and Execution Reserves}
 
 For liquidity-forwarding loans, the engine sizes separate reserves for funding mismatch and execution cost. The rate buffer covers the expected shortfall of the maximum pathwise funding deficit over the loan term; the collateral conversion reserve covers stressed round-trip execution costs. Both are calibrated jointly so that a collateral crash, higher utilization, thinner liquidity, and longer settlement delay can occur in the same path~\cite{bastankhah2024b,baude2025,chitra2023,nadkarni2025}.
@@ -56,13 +57,6 @@ For liquidity-forwarding loans, the engine sizes separate reserves for funding m
 \subsection{Pricing}
 
 Each quote is priced from expected gross credit loss, the incremental tail capital consumed by each balance sheet in the loss waterfall, expected hedging costs, and operating costs~\cite{baude2025,halpern2024,szpruch2024}. Each Risk House optimizes its own objective within constraints set by the \daloc{} Risk Kernel and its published policy; quote competition selects the best compatible terms among feasible offers.
-
-For a single linear collateral asset with quantity~$C_i$ and spot price~$S_t$, the indicative liquidation barrier is
-\begin{equation}
-  S^{\mathrm{liq}}_i(t) = \frac{D_i(t)}{C_i\,\theta_i}.
-  \label{eq:liqbarrier}
-\end{equation}
-For multi-asset, yield-bearing, or option collateral, no single spot barrier is sufficient; the engine solves $\HF_i(t) = 1$ using full portfolio revaluation.
 
 \subsection{Portfolio Aggregation and Concentration Risk}
 
@@ -89,6 +83,4 @@ Public liquidators receive the first execution window; the Risk House acts as co
 
 \subsection{Operational Risk and Model Governance}
 
-Market and funding risks are estimated probabilistically where sufficient data exist. Sparse infrastructure failures---smart-contract, bridge, oracle, chain-halt, proof-system---are controlled through deterministic scenarios, exposure caps, and conservative add-ons rather than spuriously precise event frequencies.
-
-Each quote records the data snapshot, model hash, and calibration window used to produce it. Recalibration is triggered when realized conditions deviate materially from model assumptions. Governance and infrastructure risks are disclosed separately: correct execution, prudent parameter setting, and adequate capital are distinct risk questions~\cite{bartoletti2025,zbandut2026}.
+Market and funding risks are estimated probabilistically where sufficient data exist. Sparse infrastructure failures (smart-contract, bridge, oracle, chain-halt, proof-system) are controlled through deterministic scenarios, exposure caps, and conservative add-ons rather than spuriously precise event frequencies. Each quote records the data snapshot, model hash, and calibration window used to produce it; recalibration is triggered when realized conditions deviate materially from model assumptions~\cite{bartoletti2025,zbandut2026}.
