@@ -3,17 +3,17 @@
 
 \subsection{Order Book}
 
-All loan activity flows through a single order book maintained off-chain by each market's operator---the party that advances epochs, performs matching, and produces zero-knowledge proofs for that market. Borrower requests and solver quotes use the same intent structure---collateral, principal, rate, term, and execution path. The operator selects the best rate for the borrower among criteria-compatible quotes; the settlement proof verifies that no better match was skipped. Quote terms are visible only to the operator, the solver, and the borrower.
+All loan activity flows through a single order book maintained off-chain by each market's operator (the party that advances epochs, performs matching, and produces zero-knowledge proofs for that market). Borrower requests and solver quotes use the same intent structure: collateral, principal, rate, term, and execution path. The operator selects the best rate for the borrower among criteria-compatible quotes; the settlement proof verifies that no better match was skipped. Quote terms are visible only to the operator, the solver, and the borrower.
 
 Participation requires no capital commitment. A borrower or solver signs an off-chain intent and grants a token allowance to the hub, authorizing a future transfer but moving nothing. Capital is transferred only when an epoch's settlement proof executes the match on-chain; until then, funds remain in the participant's wallet.
 
 \subsection{Criteria-Based Matching}
 
-Beyond price compatibility, a match must satisfy \emph{criteria}: typed attributes attached to an intent---counterparty allowlists, jurisdictional restrictions, KYC-tier requirements, or sanctions-screen attestations. The operator treats a pair as compatible only if each side's criteria are satisfied by the other's attributes. Unrestricted participants never see restricted entries whose criteria they cannot satisfy; restricted participants match only against compatible counterparties. There is no separate permissioned market; entries in one order book vary only in how restrictive they are.
+Beyond price compatibility, a match must satisfy \emph{criteria}: typed attributes attached to an intent (counterparty allowlists, jurisdictional restrictions, KYC-tier requirements, or sanctions-screen attestations). The operator treats a pair as compatible only if each side's criteria are satisfied by the other's attributes. Unrestricted participants never see restricted entries whose criteria they cannot satisfy; restricted participants match only against compatible counterparties. There is no separate permissioned market; entries in one order book vary only in how restrictive they are.
 
 This avoids the fragmentation of permissioned forks: one liquidity surface, one risk engine, one settlement pipeline, one audit perimeter. Adding a new jurisdiction means adding a new attestation issuer, not deploying new contracts.
 
-Criteria can be committed-only---stored as a hash, evaluated inside the proof, revealing only the boolean outcome. Counterparty attributes are typically committed-only, preserving privacy while still enforcing compatibility. The default is open: unrestricted intents match against anyone.
+Criteria can be committed-only (stored as a hash, evaluated inside the proof, revealing only the boolean outcome). Counterparty attributes are typically committed-only, preserving privacy while still enforcing compatibility. The default is open: unrestricted intents match against anyone. Criteria proofs are a protocol-level matching primitive; they do not constitute or replace compliance with applicable legal or regulatory obligations, which remain the responsibility of each participant.
 
 \subsection{Markets}
 
@@ -23,9 +23,9 @@ Markets are created permissionlessly through the \emph{hub} contract (DalocHub).
 
 Different markets can encode different collateral strategies: a \emph{classical} market locks collateral as a liquidation hedge, while a more aggressive market can permit managed rehypothecation. The choice is a market-definition decision, not a protocol-level toggle.
 
-Each market deploys issuer contracts on both the collateral and principal chains; each funded loan creates per-loan contracts at deterministic \texttt{CREATE2} addresses. Per-loan contracts are isolated---one per loan, not shared across borrowers---so one position's risk cannot cascade to another.
+Each market deploys issuer contracts on both the collateral and principal chains; each funded loan creates per-loan contracts at deterministic \texttt{CREATE2} addresses. Per-loan contracts are isolated (one per loan, not shared across borrowers), so one position's risk cannot cascade to another.
 
-Isolation extends beyond individual positions to entire markets. Each market operates as an independent state machine: it advances its own epochs, maintains its own state root, and shares no global state with other markets. A market can access only its own balances---one market's bug or misconfiguration cannot reach into another's funds. Multiple markets for the same collateral--principal pair may coexist under different risk parameters, rule sets, or execution operators---participants evaluate each market's operator, parameters, and track record before choosing where to transact.
+Isolation extends beyond individual positions to entire markets. Each market operates as an independent state machine: it advances its own epochs, maintains its own state root, and shares no global state with other markets. A market can access only its own balances; one market's bug or misconfiguration cannot reach into another's funds. Multiple markets for the same collateral/principal pair may coexist under different risk parameters, rule sets, or execution operators; participants evaluate each market's operator, parameters, and track record before choosing where to transact.
 
 \subsection{Hook Composition}
 
@@ -37,9 +37,9 @@ Solvers assemble hook chains and commit them into the settlement tree before on-
 
 Permissionless markets, hook composition, and constrained execution together form a programmable credit layer. A market creator writes ZK programs governing accrual, liquidation, and collateral policy; solvers compete to assemble the cheapest valid execution plan from hooks; borrowers express only high-level intents.
 
-Constrained execution environments extend this programmability to the destination chain. A margin agent on HyperEVM restricts borrowed capital to approved operations---perpetual trading only, no withdrawals---but the constraint boundary itself is programmable: HyperEVM contracts interact with HyperCore's perpetual engine via precompiles, enabling on-chain strategies within the lender-defined safety envelope:
+Constrained execution environments extend this programmability to the destination chain. A margin agent on HyperEVM restricts borrowed capital to approved operations (perpetual trading only, no withdrawals), but the constraint boundary itself is programmable: HyperEVM contracts interact with HyperCore's perpetual engine via precompiles, enabling on-chain strategies within the lender-defined safety envelope:
 \begin{itemize}
-  \item \textbf{Delta-neutral yield.} A borrower pledges stETH, borrows USDC, and the margin agent automatically opens a short ETH perpetual matching the collateral's notional. The position is market-neutral; yield equals the staking rate minus funding cost. The constraint permits only a single, fully hedged position---no directional bets.
+  \item \textbf{Delta-neutral yield.} A borrower pledges stETH, borrows USDC, and the margin agent automatically opens a short ETH perpetual matching the collateral's notional. The position is market-neutral; yield equals the staking rate minus funding cost. The constraint permits only a single, fully hedged position with no directional bets.
   \item \textbf{Automated stop-loss.} The margin agent monitors unrealized PnL via precompile reads and auto-closes the position if losses exceed a configurable threshold, bounding lender exposure during inactive periods.
   \item \textbf{Portfolio rebalancing.} The margin agent maintains multiple perpetual positions at target allocations, rebalancing when drift exceeds a bound and keeping margin utilization within the market's declared limits.
 \end{itemize}
@@ -47,6 +47,6 @@ Because the lender's risk depends on what capital \emph{can} do, not on borrower
 
 \subsection{Solvers}
 
-The Harvest Vault operator is the canonical solver---deploying vault capital into loans directly when capacity permits, or routing through external venues when it does not (Section~\ref{sec:capital}). The operator competes on the order book under the same rules as every other solver; the mandate (Section~\ref{sec:lp}) bounds its strategy, not its participation.
+The Harvest Vault operator is the canonical solver, deploying vault capital into loans directly when capacity permits or routing through external venues when it does not (Section~\ref{sec:capital}). The operator competes on the order book under the same rules as every other solver; the mandate (Section~\ref{sec:lp}) bounds its strategy, not its participation.
 
-Independent solvers coexist on the same book. A \emph{risk-taking} solver funds from its own balance sheet; a \emph{passive} solver performs \emph{liquidity forwarding}---deploying pledged collateral on established venues (Aave~\cite{aave2026}, Morpho~\cite{morphoblue2023}, Spark~\cite{spark2023}) and borrowing against it. Both modes produce structurally identical entries; the best terms win. Routing and capital sourcing are solver-level concerns, making the protocol extensible to new venues without core contract changes. \daloc{} provides the settlement rails; existing venues provide the liquidity.
+Independent solvers coexist on the same book. A \emph{risk-taking} solver funds from its own balance sheet; a \emph{passive} solver performs \emph{liquidity forwarding} by deploying pledged collateral on established venues (Aave~\cite{aave2026}, Morpho~\cite{morphoblue2023}, Spark~\cite{spark2023}) and borrowing against it. Both modes produce structurally identical entries; the best terms win. Routing and capital sourcing are solver-level concerns, making the protocol extensible to new venues without core contract changes. \daloc{} provides the settlement rails; existing venues provide the liquidity.

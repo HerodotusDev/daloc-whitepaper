@@ -1,15 +1,15 @@
 \section{Capital Management}
 \label{sec:capital}
 
-The Harvest Vault is the canonical capital source. When idle vault capital exceeds the requested principal, the operator funds the loan directly---transferring USDC to the borrower and receiving debt tokens as the creditor of record. When demand exceeds vault capacity, solvers extend reach through external lending venues, reserving vault capital only for the hedging instruments that convert variable-rate external funding to fixed terms. The operator's mandate (Section~\ref{sec:lp}) governs the allocation between paths.
+The Harvest Vault is the canonical capital source. When idle vault capital exceeds the requested principal, the operator funds the loan directly, transferring USDC to the borrower and receiving debt tokens as the creditor of record. When demand exceeds vault capacity, solvers extend reach through external lending venues, reserving vault capital only for the hedging instruments that convert variable-rate external funding to fixed terms. The operator's mandate (Section~\ref{sec:lp}) governs the allocation between paths.
 
 \subsection{Vault-Funded Path}
 
-The vault transfers principal directly to the borrower (or to the margin agent for Prime Trade). The CDP holds collateral as a liquidation hedge; no external venue is involved. Capital is committed at 1:1---no variable-rate mismatch, no hedging buffers---and the vault captures the full fixed-rate spread. This path is preferred whenever vault capacity permits.
+The vault transfers principal directly to the borrower (or to the margin agent for Prime Trade). The CDP holds collateral as a liquidation hedge; no external venue is involved. Capital is committed at 1:1 with no variable-rate mismatch or hedging buffers, and the vault captures the full fixed-rate spread. This path is preferred whenever vault capacity permits.
 
 \subsection{Liquidity-Forwarding Path}
 
-When vault idle capital is insufficient---because existing deployments have consumed it, or because the loan size exceeds available balance---solvers source principal from established lending venues~\cite{forwardingliquidity2022}. The CDP deposits collateral into the external venue (Aave~\cite{aave2026}, Morpho~\cite{morphoblue2023}, Spark~\cite{spark2023}), borrows USDC against it, and routes the USDC to the borrower. The vault commits only a fraction of principal as hedging reserves (rate buffer plus collateral conversion reserve), achieving high capital leverage. Pledged collateral simultaneously secures the \daloc{} loan and the external venue position.
+When vault idle capital is insufficient (because existing deployments have consumed it, or because the loan size exceeds available balance), solvers source principal from established lending venues~\cite{forwardingliquidity2022}. The CDP deposits collateral into the external venue (Aave~\cite{aave2026}, Morpho~\cite{morphoblue2023}, Spark~\cite{spark2023}), borrows USDC against it, and routes the USDC to the borrower. The vault commits only a fraction of principal as hedging reserves (rate buffer plus collateral conversion reserve), achieving high capital leverage. Pledged collateral simultaneously secures the \daloc{} loan and the external venue position.
 
 \begin{figure}[ht]
   \centering
@@ -21,13 +21,13 @@ When vault idle capital is insufficient---because existing deployments have cons
       sub/.style={font=\small\sffamily\bfseries}
     ]
     % --- (a) Vault-Funded ---
-    \node[sub] at (0,1) {(a) Vault-Funded --- full spread};
+    \node[sub] at (0,1) {(a) Vault-Funded: full spread};
     \node[box] (V1) at (-2.5,0) {Vault};
     \node[box] (B1) at (2.5,0)  {Borrower};
     \draw[arr] (V1) -- node[lab,above]{USDC} (B1);
 
     % --- (b) Liquidity-Forwarding ---
-    \node[sub] at (0,-1.8) {(b) Liquidity-Forwarding --- ${\sim}$20:1 leverage};
+    \node[sub] at (0,-1.8) {(b) Liquidity-Forwarding: ${\sim}$20:1 leverage};
     \node[box] (V2) at (-4,-3)    {Vault};
     \node[box] (CM) at (0,-3)     {CDP};
     \node[box] (AV) at (0,-4.8)   {Ext.\ Venue};
@@ -48,8 +48,6 @@ Both buffers on the liquidity-forwarding path are sized at quote time by the pro
   \kappa = \frac{P}{B_{\mathrm{rate}} + B_{\mathrm{conv}}},
   \label{eq:leverage}
 \end{equation}
-where $P$ is the loan principal and $B_{\mathrm{rate}} + B_{\mathrm{conv}}$ is the total hedging capital committed. On the vault-funded path $\kappa = 1$ (the vault commits the full principal); on the liquidity-forwarding path $\kappa \gg 1$.
-
-On a \$350{,}000 USDC loan, the vault-funded path commits the full principal at $\kappa = 1$. The liquidity-forwarding path reserves only ${\sim}$5\% as a rate buffer, achieving $\kappa \approx 20$---the external venue supplies the principal while the vault commits \$17{,}500. The blend between paths depends on vault capacity and market demand.
+where $P$ is the loan principal and $B_{\mathrm{rate}} + B_{\mathrm{conv}}$ is the total hedging capital committed. On the vault-funded path $\kappa = 1$ (the vault commits the full principal); on the liquidity-forwarding path, a typical rate buffer of ${\sim}$5\% achieves $\kappa \approx 20$. The blend between paths depends on vault capacity and market demand.
 
 At close, buffer surplus remains in the vault as LP yield; buffer shortfall reduces vault NAV.

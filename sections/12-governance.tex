@@ -1,4 +1,5 @@
 \section{Governance and Trust Assumptions}
+\label{sec:governance}
 
 The protocol's trust surface is deliberately narrow. Market parameters are fixed at creation and identified by their hash; every epoch advance requires a valid zero-knowledge proof registered in the facts registry (Section~\ref{sec:settlement}). Trust concentrates in the hub contract, which governs all capital flows, and in the liveness of off-chain infrastructure.
 
@@ -12,10 +13,10 @@ A multisig with timelock governs protocol contracts, which are upgradeable. Upgr
 
 \subsection{Liveness Dependencies}
 
-Settlement correctness is guaranteed by zero-knowledge proofs (Section~\ref{sec:settlement}), but liveness is not: if a market's off-chain infrastructure halts, no new epochs advance for that market. Existing positions remain safe---collateral stays locked, debt is unchanged, intent cancellation remains available---but undercollateralized positions go undetected until epochs resume.
+Settlement correctness is enforced by zero-knowledge proofs (Section~\ref{sec:settlement}), but liveness is not: if a market's off-chain infrastructure halts, no new epochs advance for that market. Existing positions remain safe (collateral stays locked, debt is unchanged, intent cancellation remains available), but undercollateralized positions go undetected until epochs resume.
 
 Each market defines a liveness timeout. If no epoch advances within that window, users may withdraw deposited capital, and the market may permit a fallback operator to resume epoch production.
 
-LTV limits, rates, and buffer sizes are produced off-chain by the risk engine. The serving computation is cryptographically verified via zero-knowledge proof (Section~\ref{sec:risk}), ensuring quotes derive correctly from the declared kernel and risk policy. The mandate (Section~\ref{sec:lp}) enforces hard floors: rate floors, LTV ceilings, concentration caps. Neither mechanism validates the underlying model calibration or Monte Carlo assumptions between those bounds.
+LTV limits, rates, and buffer sizes are produced off-chain by the risk engine. The serving computation is cryptographically verified via zero-knowledge proof (Section~\ref{sec:risk}), ensuring quotes derive correctly from the declared kernel and risk policy. The mandate (Section~\ref{sec:lp}) enforces hard bounds: rate floors, LTV ceilings, concentration caps. Neither mechanism validates the underlying model calibration or Monte Carlo assumptions between those bounds.
 
-Cross-chain USDC movement depends on Circle's CCTP attester infrastructure (Section~\ref{sec:crosschain}); the protocol inherits the attester's liveness and censorship properties. Authorization correctness is cryptographic---HDP produces Merkle proofs over actual chain state---but proof-generation availability depends on the data provider.
+Cross-chain USDC movement depends on Circle's CCTP attester infrastructure (Section~\ref{sec:crosschain}); the protocol inherits the attester's liveness and censorship properties. Authorization correctness is cryptographic (HDP produces Merkle proofs over actual chain state), but proof-generation availability depends on the data provider.
