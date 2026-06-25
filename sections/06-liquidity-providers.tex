@@ -1,11 +1,11 @@
 \section{The Harvest Vault}
 \label{sec:lp}
 
-The Harvest Vault's operator originates loans, responds to lifecycle events, and manages portfolio concentration---all within bounds set by a publicly auditable mandate and enforced per-epoch by a zero-knowledge proof. The vault is the canonical lending book: when it has sufficient idle capital, it funds loans directly at the full fixed rate (Section~\ref{sec:capital}); when demand exceeds capacity, it routes through external venues and commits only hedging reserves. Passive LPs deposit USDC and earn yield without trusting the operator's discretion---the mandate is the trust anchor, not reputation.
+The Harvest Vault's operator originates loans, responds to lifecycle events, and manages portfolio concentration. All actions are bounded by a publicly auditable mandate and enforced per-epoch by a zero-knowledge proof. The vault is the canonical lending book: when it has sufficient idle capital, it funds loans directly at the full fixed rate (Section~\ref{sec:capital}); when demand exceeds capacity, it routes through external venues and commits only hedging reserves. The mandate, not operator reputation, is the trust anchor for deployed capital.
 
 \subsection{Operator and Mandate}
 
-The operator deploys vault capital by submitting solver quotes to the order book (Section~\ref{sec:architecture}), competing on terms like any other solver. The operator's strategy is bounded by a \textbf{mandate}---a policy committed on-chain as a hash at vault deployment. Each mandate specifies:
+The operator deploys vault capital by submitting solver quotes to the order book (Section~\ref{sec:architecture}), competing on terms like any other solver. The operator's strategy is bounded by a \textbf{mandate}: a policy committed on-chain as a hash at vault deployment. Each mandate specifies:
 \begin{itemize}
   \item \textbf{Allowed collateral set:} asset addresses the operator may accept as loan collateral.
   \item \textbf{Per-collateral LTV ceiling:} maximum loan-to-value ratio the operator may offer on each collateral type.
@@ -18,12 +18,12 @@ A mandate constrains what the operator \emph{can} do, not what they \emph{must} 
 
 \subsection{Compliance Proof}
 
-Each epoch, the operator produces a zero-knowledge proof that every action satisfied the mandate. The proof takes prior vault state, the epoch's actions, and the mandate hash as public inputs, outputting a compliance fact registered in the facts registry (Section~\ref{sec:settlement}). An invalid or missing compliance proof does not halt loan settlement or affect borrowers---only the operator's fee is at risk (Section~\ref{subsec:feegating}).
+Each epoch, the operator produces a zero-knowledge proof that every action satisfied the mandate. The proof takes prior vault state, the epoch's actions, and the mandate hash as public inputs, outputting a compliance fact registered in the facts registry (Section~\ref{sec:settlement}). An invalid or missing compliance proof does not halt loan settlement or affect borrowers; only the operator's fee is at risk (Section~\ref{subsec:feegating}).
 
 \subsection{Fee-Gating}
 \label{subsec:feegating}
 
-Operators earn a spread fee escrowed during each epoch. A valid compliance proof releases the escrow; otherwise it flows back into vault NAV as LP uplift. LP-facing yield is not contingent on the compliance proof---LPs always receive their share of interest and buffer surplus.
+Operators earn a spread fee escrowed during each epoch. A valid compliance proof releases the escrow; otherwise it flows back into vault NAV as LP uplift. LP-facing yield is not contingent on the compliance proof: LPs always receive their share of interest and buffer surplus.
 
 \subsection{NAV and Shares}
 
