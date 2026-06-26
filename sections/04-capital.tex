@@ -9,7 +9,7 @@ The vault transfers principal directly to the borrower (or to the margin agent f
 
 \subsection{Liquidity-Forwarding Path}
 
-When vault idle capital is insufficient (because existing deployments have consumed it, or because the loan size exceeds available balance), solvers source principal from established lending venues~\cite{forwardingliquidity2022}. The CDP deposits collateral into the external venue (Aave~\cite{aave2026}, Morpho~\cite{morphoblue2023}, Spark~\cite{spark2023}), borrows USDC against it, and routes the USDC to the borrower. The vault commits only a fraction of principal as hedging reserves (rate buffer plus collateral conversion reserve), achieving high capital leverage. Pledged collateral simultaneously secures the \daloc{} loan and the external venue position.
+When vault idle capital is insufficient (because existing deployments have consumed it, or because the loan size exceeds available balance), solvers source principal from established lending venues. The CDP deposits collateral into the external venue (Aave~\cite{aave2026}, Morpho~\cite{morphoblue2023}, Spark~\cite{spark2023}), borrows USDC against it, and routes the USDC to the borrower. The vault commits only a fraction of principal as hedging reserves (rate buffer plus collateral conversion reserve), achieving high capital leverage. Pledged collateral simultaneously secures the \daloc{} loan and the external venue position.
 
 \begin{figure}[ht]
   \centering
