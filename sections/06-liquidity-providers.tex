@@ -18,12 +18,14 @@ A mandate constrains what the operator \emph{can} do, not what they \emph{must} 
 
 \subsection{Compliance Proof}
 
-Each epoch, the operator produces a zero-knowledge proof that every action satisfied the mandate. The proof takes prior vault state, the epoch's actions, and the mandate hash as public inputs, outputting a compliance fact registered in the facts registry (Section~\ref{sec:settlement}). An invalid or missing compliance proof does not halt loan settlement or affect borrowers; only the operator's fee is at risk (Section~\ref{subsec:feegating}).
+Each epoch, the operator produces a zero-knowledge compliance proof that the vault's actions respected the mandate committed at deployment. At a high level, the proof is generated from the prior vault state, the epoch action log, the resulting vault state, and the mandate hash. It verifies that funded loans, hedging reserves, external venue choices, concentration exposure, rate floors, LTV ceilings, and liquidation reserves remained within the mandate's bounds.
+
+The proof outputs a compliance fact registered in the facts registry and consumed by the fee-gating mechanism (Section~\ref{subsec:feegating}). The detailed proof format, public inputs, and fact verification flow are part of the settlement-program framework described in Section~\ref{sec:settlement}. An invalid or missing compliance proof does not halt loan settlement or affect borrowers; it only prevents the operator from collecting the epoch fee.
 
 \subsection{Fee-Gating}
 \label{subsec:feegating}
 
-Operators earn a spread fee escrowed during each epoch. A valid compliance proof releases the escrow; otherwise it flows back into vault NAV as LP uplift. LP-facing yield is not contingent on the compliance proof: LPs always receive their share of interest and buffer surplus.
+Operators earn a spread fee escrowed during each epoch. A valid compliance fact for the corresponding vault and epoch releases the escrow; otherwise it flows back into vault NAV as LP uplift. LP-facing yield is not contingent on the compliance proof: LPs always receive their share of interest and buffer surplus. An invalid or missing compliance proof does not reverse settled borrower loans; it affects only the operator's right to collect the epoch fee.
 
 \subsection{NAV and Shares}
 

@@ -5,7 +5,9 @@ The protocol's trust surface is deliberately narrow. Market parameters are fixed
 
 Beyond these trust surfaces, the protocol minimizes dependence on any single party. Markets are independent state machines (Section~\ref{sec:architecture}) that advance their own epochs without shared global state; deployment is permissionless, and so is participation as a solver, liquidator, or epoch executor. A forced-inclusion path through the settlement layer ensures that no operator can permanently censor intents or block exits.
 
-Safety is structural: the system invariants of Section~\ref{sec:settlement} hold across all reachable states, and no state transition can occur without a valid zero-knowledge proof. Liveness depends on each market's operator; a configurable timeout bounds how long a market can stall before a fallback operator may step in. The architecture targets fund recoverability directly from L1, independent of off-chain infrastructure. Each market defines its own data-availability policy, and the architecture admits progressive trust reduction as markets mature.
+Safety is structural: the system invariants of Section~\ref{sec:settlement} hold across all reachable states, and no state transition can occur without a valid zero-knowledge proof. Liveness depends on each market's operator and on the chains, bridges, provers, and external venues used by that market; a configurable timeout bounds how long a market can stall before a fallback operator may step in.
+
+The architecture targets custody recoverability without reliance on the original off-chain operator. Users should be able to submit cancellations, forced-inclusion requests, withdrawals, or recovery actions directly to the relevant on-chain contracts; for markets deployed on L2s, this may rely on that L2's L1 inbox, escape hatch, or forced-transaction mechanism. This does not mean that every economic action is immediately available from L1: liquidation, oracle updates, bridge movement, and external-venue unwinds still depend on the relevant chains and infrastructure being live. Each market defines its own data-availability and recovery policy, and the architecture admits progressive trust reduction as markets mature.
 
 \subsection{Protocol Administration}
 
@@ -19,4 +21,11 @@ Each market defines a liveness timeout. If no epoch advances within that window,
 
 LTV limits, rates, and buffer sizes are produced off-chain by the risk engine. The serving computation is cryptographically verified via zero-knowledge proof (Section~\ref{sec:risk}), ensuring quotes derive correctly from the declared kernel and risk policy. The mandate (Section~\ref{sec:lp}) enforces hard bounds: rate floors, LTV ceilings, concentration caps. Neither mechanism validates the underlying model calibration or Monte Carlo assumptions between those bounds.
 
-Cross-chain USDC movement depends on Circle's CCTP attester infrastructure (Section~\ref{sec:crosschain}); the protocol inherits the attester's liveness and censorship properties. Authorization correctness is cryptographic (HDP produces Merkle proofs over actual chain state), but proof-generation availability depends on the data provider.
+Cross-chain movement depends on the selected bridge infrastructure. For the
+initial USDC-based markets, Circle's CCTP attester infrastructure is the canonical
+route (Section~\ref{sec:crosschain}); the protocol inherits the attester's liveness
+and censorship properties. Authorization correctness is cryptographic: the
+Herodotus Data Processor (HDP) produces Merkle proofs over actual chain state,
+as described in Section~\ref{sec:crosschain}. However, proof-generation availability
+still depends on the data provider, and bridge execution depends on the source
+and destination chains being live.

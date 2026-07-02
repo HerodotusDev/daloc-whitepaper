@@ -5,7 +5,9 @@
 
 Time advances in \emph{epochs}: bounded settlement windows in which the off-chain engine matches intents, runs state-transition programs, and commits a snapshot on-chain. Epoch duration is configurable per market, trading latency against proof cost.
 
-Each snapshot carries five Merkle roots: executable transfers, internal market state, debt records, liquidation events, and CDP deployments.\footnote{Internal state uses ZK-friendly Merkle structures; on-chain roots use keccak-hashed binary trees.} Posting a new epoch requires a valid \emph{fact} in the facts registry, attesting correct state transition via zero-knowledge proof.
+Each snapshot carries five Merkle roots: executable transfers, internal market state, debt records, liquidation events, and CDP deployments.\footnote{Internal state uses ZK-friendly Merkle structures; on-chain roots use keccak-hashed binary trees.} Posting a new epoch requires a valid state-transition fact in the facts registry, attesting correct transition from the previous snapshot to the new one.
+
+Examples of facts that can support an epoch transition include: a matching fact showing that accepted borrower intents and solver quotes were criteria-compatible and that no better compatible quote was skipped; an origination fact committing the transfer and hook leaves for a new loan; a liquidation-detection fact asserting that a loan's health factor is below one under the market's oracle program; a close or refinancing fact verifying repayment, current interest accrual, and reserve accounting; and a vault-compliance fact attesting that operator actions respected the Harvest Vault mandate. Only the state-transition fact advances the market epoch; the other facts justify specific leaves or accounting updates included in that transition.
 
 Execution is inclusion-proof driven: anyone can execute a committed leaf by supplying a Merkle proof against the epoch root stored on-chain.
 
@@ -13,7 +15,9 @@ Each epoch advance processes three concurrent generations: finalizing loans from
 
 \subsection{Settlement Programs}
 
-On-chain contracts are settlement executors: they verify Merkle proofs and execute committed transfers and hook chains but contain no market-specific logic. All behavior (interest computation, liquidation detection, oracle selection, collateral policy) lives in zero-knowledge programs whose outputs the contracts verify.
+On-chain contracts are settlement executors: they verify Merkle proofs and execute committed transfers and hook chains but contain no market-specific logic. Market behavior (interest computation, liquidation detection, oracle selection, collateral policy, and mandate compliance) is computed by zero-knowledge programs off-chain. Those programs output facts: hash-bound statements tying a program hash, market identifier, chain, epoch, prior state, new state, and any computed values to a verified proof.
+
+The contracts do not recompute the market logic. Instead, they reconstruct the expected fact hash from their fixed parameters and the submitted leaf or state transition, check that the facts registry marks that fact as valid, and apply the corresponding transfer, accrual, liquidation, or epoch update only if the fact is present. What is verified on-chain is therefore not an oracle feed or risk model directly, but the existence of a valid proof that the declared program produced the declared output from the declared inputs.
 
 Programs split by economic cadence. \textbf{Matching} is one-time per loan: transfers, debt issuance, CDP authorization, and criteria-compatibility evaluation (Section~\ref{sec:architecture}). \textbf{Interest accrual} is periodic per debt per time window. \textbf{Liquidation} is event-triggered when health breaches produce liquidation leaves. \textbf{Close} is terminal after repayments and accrual catch up. \textbf{Compliance} is periodic per vault epoch, attesting operator behavior against the mandate (Section~\ref{sec:lp}).
 
@@ -24,6 +28,25 @@ All programs submit results through a single \emph{facts registry} that accepts 
 Each market has two contracts. The \textbf{collateral manager issuer} (collateral chain) advances epoch state, executes Merkle-authorized transfers, and deploys per-loan collateral managers. The \textbf{debt issuer} (principal chain) advances epoch state and deploys per-loan issued debt tokens. Neither contains market-specific logic.
 
 Each loan also has two contracts. The \textbf{collateral manager} (CDP) holds pledged assets and executes hook-composed pipelines; permitted operations are defined by the market's ZK programs. The \textbf{issued debt} is a per-loan ERC-20 tracking accrual via verified facts and partitioning repayment into principal reserve, interest reserve, and protocol fees (Section~\ref{sec:tokens}).
+
+Chain downtime is treated as a liveness failure of the affected issuer or adapter,
+not as a correctness failure. If the collateral chain stalls, new collateral pledges,
+collateral releases, liquidations, and CDP-side hook execution cannot progress on
+that chain. If the principal chain stalls, debt issuance, repayments, redemptions,
+and principal-side epoch advances cannot progress. If a destination chain used
+for Prime Trade or a bridge adapter stalls, margin deployment, recall, or close
+execution may be delayed. In all cases, the market resumes from the last valid
+state root once the affected chain resumes; no alternative state can be accepted
+without the required facts and Merkle roots.
+
+During a chain halt, positions remain recorded at the last finalized state, but
+economic risk can continue to move off-chain or on other chains. Oracle prices
+may change, external venue utilization may change, and margin positions may
+gain or lose value while the affected \daloc{} contracts cannot execute. Markets
+therefore treat chain downtime as a modeled liveness risk: quote admissibility,
+liquidation-latency bounds, venue limits, and Risk House commitments must account
+for the possibility that settlement, liquidation, or close execution is delayed by
+a host-chain or destination-chain outage.
 
 \subsection{Oracle Freedom and Permissionless Markets}
 

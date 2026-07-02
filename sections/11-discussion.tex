@@ -13,6 +13,12 @@
 
 \textbf{Cross-chain liveness.} CCTP bridge delays or outages stall capital delivery on Prime Trade origination and close. Positions remain valid but economically frozen until the bridge resumes. Markets that rely on a single bridge path inherit its liveness profile.
 
+\textbf{Host-chain downtime.} \daloc{} markets inherit the liveness of the chains on which their issuers, CDPs, debt tokens, margin agents, and bridge adapters are deployed. A halt of a collateral chain, principal chain, or destination chain prevents the affected contracts from advancing epochs, executing hooks, processing repayments, or completing liquidations until block production resumes. Such a halt does not create an invalid \daloc{} state, but it can delay close-out while collateral prices, funding rates, and venue liquidity continue to move elsewhere. Markets relying on L2s also inherit the liveness and recovery properties of the underlying rollup, including any L1 forced-transaction or escape mechanism.
+
+\textbf{External-venue liquidity and liveness.} Liquidity-forwarding loans depend on external lending venues for borrowing, repayment, collateral withdrawal, and liquidation timing. If an external venue has insufficient available liquidity, pauses a reserve, experiences degraded oracle or governance operations, or liquidates faster than \daloc{} can complete its two-epoch process, the loan may enter a pending-unwind state and residual losses may flow through the loan reserves, Risk House commitment, and vault loss waterfall. Reserve sizing and admissibility checks reduce this risk but cannot remove it; they make external venue liquidity risk explicit, priced, and isolated per loan.
+
+\textbf{Prime Trade venue downtime.} Prime Trade positions depend on HyperEVM, HyperCore, and any selected perpetual venue remaining live enough to open, maintain, reduce, and close margin positions. If Hyperliquid infrastructure or the destination venue stalls, the margin agent may be unable to rebalance, stop out, recall capital, or close the position on schedule. The position remains constrained by the margin-agent program, but economic exposure can change while execution is unavailable. Venue downtime, API and precompile availability, margin-engine behavior, and withdrawal or recall latency must therefore be part of the market's Risk Kernel, Risk House policy, and admissibility checks.
+
 \subsection{Future Capabilities}
 
 The architecture is designed for staged extension. Near-term additions include:

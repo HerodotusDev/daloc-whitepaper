@@ -9,7 +9,9 @@ A holder of any supported token borrows against it at a fixed rate for a fixed t
 
 \subsection{Prime Trade}
 
-A borrower draws a USDC credit line and routes it to a per-loan margin agent on HyperEVM, gaining leveraged perpetual exposure without selling the underlying collateral (Section~\ref{sec:crosschain}). The margin agent restricts capital to approved operations (trading only, no withdrawals), so the lender's risk depends on programmatic constraints, not borrower discretion. Combined with liquidity-forwarding origination, the product compounds venue leverage on top of the borrowing LTV, controlling large notional with modest collateral.
+A borrower draws a credit line in the market's supported principal asset and routes it to a per-loan margin agent on HyperEVM, gaining leveraged perpetual exposure without selling the underlying collateral (Section~\ref{sec:crosschain}). In the initial markets, USDC is the canonical principal asset because of its deep DeFi liquidity and native cross-chain transfer infrastructure through CCTP. USDC is therefore the reference implementation, not a permanent protocol constraint: other stablecoins, including USDT or USDT0, may be supported by separate markets if the relevant bridge adapter, liquidity, risk, and compliance requirements are satisfied.
+
+The margin agent restricts capital to approved operations (trading only, no withdrawals), so the lender's risk depends on programmatic constraints, not borrower discretion. Combined with liquidity-forwarding origination, the product compounds venue leverage on top of the borrowing LTV, controlling large notional with modest collateral.
 
 \subsection{Earn}
 

@@ -17,7 +17,9 @@ Criteria can be committed-only (stored as a hash, evaluated inside the proof, re
 
 \subsection{Markets}
 
-Criteria restrict \emph{who} can match; markets define \emph{what} the matched position looks like. \daloc{} is organized around isolated lending markets. Each market is uniquely identified by a deterministic hash of its parameters: the collateral asset, principal chain and asset, and four zero-knowledge program hashes that govern all loan behavior. All parameters are fixed at creation; a different rate model, liquidation rule, or collateral policy constitutes a different market.
+Criteria restrict \emph{who} can match; markets define \emph{what} the matched position looks like. \daloc{} is organized around isolated lending markets. Each market is uniquely identified by a deterministic hash of its parameters: the collateral asset, principal chain and asset, and four zero-knowledge program hashes that govern loan behavior, including accrual, liquidation, collateral policy, and oracle-dependent state transitions. All parameters are fixed at creation; a different rate model, liquidation rule, collateral policy, or oracle policy constitutes a different market.
+
+Oracle selection follows the same immutability rule. In protocols such as Morpho Blue, the oracle is an explicit market parameter: each market points to a specific oracle contract, fixed at creation~\cite{morphoblue2023}. In \daloc{}, oracle logic is embedded in the market's zero-knowledge programs instead. A market program specifies which on-chain sources may be read, how prices or rates are transformed, and which freshness constraints must hold before a state transition is accepted. The protocol verifies the program output, not a protocol-wide oracle choice. Changing the oracle source, aggregation rule, freshness bound, or liquidation-price logic changes the program hash and therefore defines a new market.
 
 Markets are created permissionlessly through the \emph{hub} contract (DalocHub). The hub is the sole token rail: all user-facing ERC-20 transfers route through it, creating a single authorization point for capital flows, intent cancellations, and global pause.
 
@@ -25,7 +27,7 @@ Different markets can encode different collateral strategies: a \emph{classical}
 
 Each market deploys issuer contracts on both the collateral and principal chains; each funded loan creates per-loan contracts at deterministic \texttt{CREATE2} addresses. Per-loan contracts are isolated (one per loan, not shared across borrowers), so one position's risk cannot cascade to another.
 
-Isolation extends beyond individual positions to entire markets. Each market operates as an independent state machine: it advances its own epochs, maintains its own state root, and shares no global state with other markets. A market can access only its own balances; one market's bug or misconfiguration cannot reach into another's funds. Multiple markets for the same collateral/principal pair may coexist under different risk parameters, rule sets, or execution operators; participants evaluate each market's operator, parameters, and track record before choosing where to transact.
+Isolation extends beyond individual positions to entire markets. Each market operates as an independent state machine: it advances its own epochs, maintains its own state root, and shares no global state with other markets. A market can access only its own balances; one market's bug or misconfiguration cannot reach into another's funds. Multiple markets for the same collateral/principal pair may coexist under different risk parameters, oracle policies, rule sets, or execution operators; participants evaluate each market's operator, parameters, and track record before choosing where to transact.
 
 \subsection{Hook Composition}
 
