@@ -5,15 +5,15 @@ The Harvest Vault is the canonical capital source. When idle vault capital excee
 
 \subsection{Vault-Funded Path}
 
-The vault transfers principal directly to the borrower (or to the margin agent for Prime Trade). The CDP holds collateral as a liquidation hedge; no external venue is involved. Capital is committed at 1:1 with no variable-rate mismatch or hedging buffers, and the vault captures the full fixed-rate spread. This path is preferred whenever vault capacity permits.
+The vault transfers principal directly to the borrower (or to the margin agent for Prime Trade). The CDP holds collateral as a liquidation hedge; no external venue is involved. Capital is committed at 1:1 with no variable-rate mismatch or hedging buffers, and the vault captures the full fixed-rate coupon. This path is preferred whenever vault capacity permits.
 
 \subsection{Liquidity-Forwarding Path}
 
 When vault idle capital is insufficient (because existing deployments have consumed it, or because the loan size exceeds available balance), solvers source principal from established lending venues rather than from the vault balance sheet directly. The CDP deposits pledged collateral, or an approved intermediate asset after a collateral swap, into an admissible external venue, borrows the market's supported principal asset against it, and routes the borrowed asset to the borrower or margin agent. For the initial USDC-based markets, admissible venues may include Aave~\cite{aave2026}, Morpho~\cite{morphoblue2023}, and Spark~\cite{spark2023}. The vault commits only a fraction of principal as hedging reserves (rate buffer plus collateral conversion reserve), achieving high capital leverage. Pledged collateral simultaneously secures the \daloc{} loan and the external venue position.
 
-External venues are not selected ad hoc by solvers at execution time. Each market defines its admissible venue set through its zero-knowledge programs and authorized hook adapters. A venue is admissible only if its collateral support, principal asset, oracle behavior, liquidation mechanics, rate model, and on-chain state can be verified by the market's programs and incorporated into the risk engine. Changing the venue set, adapter, or verification logic therefore defines a different market.
+External venues are not selected arbitrarily by solvers at execution time. Each market defines its admissible venue set through its zero-knowledge programs and authorized hook adapters. A venue is admissible only if its collateral support, principal asset, oracle behavior, liquidation mechanics, rate model, and on-chain state can be verified by the market's programs and incorporated into the risk engine. Changing the venue set, adapter, or verification logic therefore defines a different market.
 
-When Harvest Vault capital is used for hedging reserves, the vault mandate may impose stricter constraints than the market itself: allowed venues, maximum exposure per venue, maximum utilization or borrow-rate assumptions, minimum liquidity depth, liquidation-latency bounds, and adapter-level risk limits. The operator's per-epoch compliance proof verifies that liquidity-forwarding activity stayed within this mandate, preventing vault capital from being routed into unsupported or unmodeled venues.
+When Harvest Vault capital is used for hedging reserves, the vault mandate may impose stricter constraints than the market itself: allowed venues, maximum exposure per venue, maximum utilization or borrow-rate assumptions, minimum liquidity depth, liquidation-latency bounds, and adapter-level risk limits. The operator's per-epoch compliance proof attests that liquidity-forwarding activity stayed within this mandate; a missing or invalid proof forfeits the operator's fee for that epoch (Section~\ref{sec:lp}).
 
 \begin{figure}[ht]
   \centering
@@ -35,17 +35,17 @@ When Harvest Vault capital is used for hedging reserves, the vault mandate may i
     \draw[arr] (CM) -- node[lab,right]{collateral} (AV);
     \draw[arr] (AV) -- node[lab,right]{USDC} (B2);
   \end{tikzpicture}
-  \caption{Capital paths. \textbf{(a)}~Vault-funded: the vault transfers principal directly and captures the full fixed-rate spread. \textbf{(b)}~Liquidity-forwarding: the CDP borrows from the external venue; the vault commits only hedging capital (dashed), achieving ${\sim}$20:1 leverage.}
+  \caption{Capital paths. \textbf{(a)}~Vault-funded: the vault transfers principal directly and captures the full fixed-rate coupon. \textbf{(b)}~Liquidity-forwarding: the CDP borrows from the external venue; the vault commits only hedging capital (dashed), achieving ${\sim}$20:1 leverage.}
   \label{fig:capital}
 \end{figure}
 
 \subsection{Capital Efficiency}
 
-Both buffers on the liquidity-forwarding path are sized at quote time by the provable risk engine (Section~\ref{sec:risk}): the rate buffer from tail simulations of variable-rate paths, the collateral conversion reserve from simulated round-trip execution costs. The vault's capital leverage on a single loan is
+Both buffers on the liquidity-forwarding path are sized at quote time by the provable risk engine (Section~\ref{sec:risk}): the rate buffer from tail simulations of variable-rate paths, the collateral conversion reserve from simulated round-trip execution costs. For a liquidity-forwarding loan, the vault's capital leverage is
 \begin{equation}
   \kappa = \frac{P}{B_{\mathrm{rate}} + B_{\mathrm{conv}}},
   \label{eq:leverage}
 \end{equation}
-where $P$ is the loan principal and $B_{\mathrm{rate}} + B_{\mathrm{conv}}$ is the total hedging capital committed. On the vault-funded path $\kappa = 1$ (the vault commits the full principal); on the liquidity-forwarding path, a typical rate buffer of ${\sim}$5\% achieves $\kappa \approx 20$. The blend between paths depends on vault capacity and market demand.
+where $P$ is the loan principal and $B_{\mathrm{rate}} + B_{\mathrm{conv}}$ is the total hedging capital committed. On the vault-funded path the vault commits the full principal ($\kappa = 1$ by definition); on the liquidity-forwarding path, a typical rate buffer of ${\sim}$5\% achieves $\kappa \approx 20$. The blend between paths depends on vault capacity and market demand.
 
 At close, buffer surplus remains in the vault as LP yield; buffer shortfall reduces vault NAV.
