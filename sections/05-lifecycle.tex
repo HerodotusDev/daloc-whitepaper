@@ -9,11 +9,11 @@ A borrower posts a request, solvers respond with quotes, and the accepted quote 
 
 \textbf{Liquidity-forwarding.} The hook chain deposits collateral into the collateral manager, supplies it to the external venue, borrows USDC against it, and transfers the USDC to the borrower. A rate buffer is escrowed to hedge the mismatch between the borrower's fixed rate and the venue's variable rate.
 
-\textbf{Liquidity-forwarding with collateral swap.} For collateral not directly supported by the selected external venue (e.g.\ LDO or UNI), the market may authorize a swap hook that converts the pledged collateral into a venue-listed intermediate asset (e.g.\ LDO $\to$ WETH) through an approved AMM, RFQ venue, or aggregator before the chain proceeds as above. This path is available only for collateral assets, intermediate assets, swap adapters, and execution routes admitted by the market's zero-knowledge programs and, where applicable, by the covering Risk House policy and Harvest Vault mandate.
+\textbf{Liquidity-forwarding with collateral swap.} For collateral not directly supported by the selected external venue (e.g.\ LDO or UNI), the market may authorize a swap hook that converts the pledged collateral into a venue-listed intermediate asset (e.g.\ LDO $\to$ WETH) through an approved AMM, RFQ venue, or aggregator before the hook chain proceeds as above. This path is available only for collateral assets, intermediate assets, swap adapters, and execution routes admitted by the market's zero-knowledge programs and, where applicable, by the designated Risk House policy and Harvest Vault mandate.
 
-The swap hook is executed with explicit price-protection constraints. The settlement leaf commits to the swap adapter, input asset, output asset, input amount, minimum output amount, recipient CDP, deadline, and maximum slippage or price-impact bound. If these constraints are not satisfied at execution time, the hook reverts and the origination does not settle. Both a rate buffer and a collateral conversion reserve are escrowed; the conversion reserve is sized by the risk engine to cover stressed round-trip execution costs. In canonical \daloc{} markets, assets or routes with insufficient oracle quality, shallow executable liquidity, excessive price impact, unavailable liquidation paths, or unsupported venue integrations are rejected rather than routed through the swap path.
+The swap hook is executed with explicit price-protection constraints committed in the settlement leaf (minimum output, deadline, maximum slippage). If these constraints are not satisfied at execution time, the hook reverts and the origination does not settle. Both a rate buffer and a collateral conversion reserve are escrowed; the conversion reserve is sized by the risk engine to cover stressed round-trip execution costs. In canonical \daloc{} markets, assets or routes with insufficient oracle quality, shallow executable liquidity, or unavailable liquidation paths are rejected rather than routed through the swap path.
 
-\textbf{Hyperliquid margin.} For Prime Trade positions, the hook chain follows either pipeline above but diverts at the final step: instead of transferring USDC to the borrower, a bridge hook burns it via CCTP~\cite{cctp} to a per-loan margin agent on HyperEVM, which deposits it as margin (Section~\ref{sec:crosschain}). Collateral never leaves Ethereum.
+\textbf{Hyperliquid margin.} For Prime Trade positions, the hook chain follows either pipeline above but diverts at the final step: instead of transferring USDC to the borrower, a bridge hook routes it to a per-loan margin agent on HyperEVM, which deposits it as margin (Section~\ref{sec:crosschain}). Collateral never leaves Ethereum.
 
 \begin{figure}[ht]
   \centering
@@ -35,22 +35,22 @@ The swap hook is executed with explicit price-protection constraints. The settle
 
 \subsection{Refinancing}
 
-Not every loan runs to its original maturity. A borrower refinances by posting a single refinancing intent; the matching engine treats it identically to a new origination request. On match, the existing loan closes and a new one originates atomically within the same epoch. When the Harvest Vault is creditor on both sides, refinancing is a pure accounting event: no capital moves, only terms change. When the creditor differs, repayment and new funding settle within the same settlement tree.
+Not every loan runs to its original maturity. A borrower refinances by posting a single refinancing intent; the matching engine treats it identically to a new origination request. On match, the existing loan closes and a new one originates atomically within the same epoch. When the Harvest Vault is creditor on both sides of a vault-funded loan, refinancing is a pure accounting event: no capital moves, only terms change. When the creditor differs or the loan involves an external venue, repayment and new funding settle within the same settlement tree. For Prime Trade positions, refinancing applies to the credit terms on Ethereum; margin capital on HyperEVM remains in place unless the position is fully closed and re-originated.
 
 \subsection{Close and Liquidation}
 
-On voluntary close, the borrower deposits the principal asset into the loan's debt contract. After interest accrual is verified (Section~\ref{sec:tokens}), the vault redeems its position and a close hook chain repays the variable debt on the external venue, withdraws the collateral, and returns it to the borrower (with a reverse swap for collateral-swap loans). Hedging surplus stays in the vault as LP yield. Vault-funded loans skip the external unwind: the borrower repays, and collateral is released directly.
+On voluntary close, the borrower deposits the principal asset into the loan's debt contract. After interest accrual is verified (Section~\ref{sec:tokens}), the creditor (vault or independent solver) redeems its position and a close hook chain repays the variable debt on the external venue, withdraws the collateral, and returns it to the borrower (with a reverse swap for collateral-swap loans). Hedging surplus stays with the capital provider as yield. Vault-funded loans skip the external unwind: the borrower repays, and collateral is released directly. For Prime Trade positions, the close hook chain first recalls capital from the destination venue via the bridge before repaying the source-chain debt.
 
 The external unwind is subject to venue-level liquidity and liveness constraints. If the venue cannot provide the required borrow liquidity at origination, or if utilization, borrow rate, pause status, or available liquidity violates the bounds committed in the quote, the origination hook reverts and the loan does not settle. For active liquidity-forwarding loans, a stressed venue can increase variable funding costs, delay collateral withdrawal, or force execution through a slower liquidation route. These risks are modeled by the risk engine through rate buffers, collateral-conversion reserves, venue exposure limits, and liquidation-latency assumptions.
 
-If a close or liquidation cannot fully unwind the external venue position in the expected epoch because the venue has insufficient available liquidity, withdrawals are paused, or the adapter reports a failed unwind, the loan enters a pending-unwind state. Debt repayment and recovered assets are ring-fenced, borrower withdrawals are delayed until the external position is unwound or auctioned, and any excess funding or execution cost is charged first against loan-specific reserves. Residual shortfall follows the loss waterfall: Risk House assurance commitment where applicable, then Risk House first-loss capital or vault impairment according to the market policy. \daloc{} cannot remove external venue liquidity risk; it makes the risk explicit, priced, reserved, and isolated per loan.
+If a close or liquidation cannot fully unwind the external venue position in the expected epoch because the venue has insufficient available liquidity, withdrawals are paused, or the adapter reports a failed unwind, the loan enters a pending-unwind state. Debt repayment and recovered assets are ring-fenced, borrower withdrawals are delayed until the external position is unwound or auctioned, and any excess funding or execution cost is charged first against loan-specific reserves. Residual shortfall follows the loss waterfall (Section~\ref{sec:risk}): Risk House assurance commitment, Risk House first-loss capital, any protocol catastrophe layer, and finally vault impairment according to the market policy. \daloc{} cannot remove external venue liquidity risk; it makes the risk explicit, priced, reserved, and isolated per loan.
 
 Liquidation triggers when the health factor drops below~1:
 \begin{equation}
   \HF = \frac{C_{\mathrm{val}}\,\theta}{D} < 1,
   \label{eq:healthfactor}
 \end{equation}
-where $C_{\mathrm{val}}$ is the collateral's current market value, $\theta$ the loan's liquidation threshold (set at origination, strictly above the origination LTV), and $D$ the outstanding debt.
+where $C_{\mathrm{val}}$ is the collateral's current market value, $\theta$ the loan's liquidation threshold (set at origination, strictly above the origination LTV), and $D$ the outstanding debt including accrued interest. Because $D$ grows with interest accrual, the risk engine constrains $(\theta, \lambda, r, T)$ so that the health factor remains above~1 at maturity under constant collateral value.
 
 Liquidation spans two epochs, separating detection from seizure.
 
@@ -58,7 +58,7 @@ Liquidation spans two epochs, separating detection from seizure.
 
 \textbf{Grace period} (epoch boundary). Between detection and seizure, the borrower may add collateral or partially repay debt to restore $\HF > 1$. The epoch duration (configurable per market) determines the length of this window.
 
-\textbf{Seizure} (epoch~$n{+}1$). A liquidator provides a Merkle proof against the liquidation root, repays outstanding debt $R$ via the debt token contract, and seizes collateral worth $R \cdot (1 + \beta)$ from the CDP, where $\beta$ is the liquidation bonus fixed at origination. Partial liquidation repays the minimum $R$ that restores the health factor above~1; full liquidation repays the entire debt and seizes all remaining collateral. The bonus compensates the liquidator for price risk during the grace period. Collateral moves only after debt repayment is recorded on-chain.
+\textbf{Seizure} (epoch~$n{+}1$). A liquidator provides a Merkle proof against the liquidation root, repays outstanding debt $R$ via the debt token contract, and seizes collateral worth $R \cdot (1 + \beta)$ from the CDP, where $\beta$ is the liquidation bonus fixed at origination. For liquidity-forwarding loans, the seizure hook chain first unwinds the external venue position. Partial liquidation repays the minimum $R$ that restores the health factor above~1; full liquidation repays the entire debt and seizes all remaining collateral. The bonus compensates the liquidator for price risk during the grace period. Collateral moves only after debt repayment is recorded on-chain.
 
 Because each loan is isolated, bad debt cannot cascade across positions. Shortfalls reduce vault NAV through impaired debt-token value (Section~\ref{sec:lp}).
 
@@ -71,7 +71,7 @@ Because each loan is isolated, bad debt cannot cascade across positions. Shortfa
     \node[box] (a1) at (-4.3,0)    {Borrower};
     \node[box] (a2) at (-4.3,-1.8) {CDP};
     \node[box] (a3) at (-4.3,-3.6) {Ext.\ Venue};
-    \node[box] (a4) at (-4.3,-5.4) {CCTP};
+    \node[box] (a4) at (-4.3,-5.4) {Bridge};
     \draw[arr] (a1) -- node[lab,right]{ETH} (a2);
     \draw[arr] (a2) -- node[lab,right]{supply} (a3);
     \draw[arr] (a3) -- node[lab,right]{USDC} (a4);
@@ -89,13 +89,13 @@ Because each loan is isolated, bad debt cannot cascade across positions. Shortfa
     \node[sub] at (4.3,1.15) {\shortstack{(c) Close\\[2pt]%
     {\scriptsize\mdseries\color{black!45}HyperEVM $\to$ Ethereum}}};
     \node[box] (c1) at (4.3,0)    {HyperCore};
-    \node[box] (c2) at (4.3,-1.8) {CCTP};
+    \node[box] (c2) at (4.3,-1.8) {Bridge};
     \node[box] (c3) at (4.3,-3.6) {Ext.\ Venue};
     \node[box] (c4) at (4.3,-5.4) {Borrower};
     \draw[arr] (c1) -- node[lab,right]{USDC} (c2);
     \draw[arr] (c2) -- node[lab,right]{repay} (c3);
     \draw[arr] (c3) -- node[lab,right]{ETH} (c4);
   \end{tikzpicture}
-  \caption{Prime Trade lifecycle. \textbf{(a)}~Borrower pledges ETH; CDP supplies to the external venue; USDC bridged via CCTP. \textbf{(b)}~Margin agent deposits into HyperCore; borrower trades (dashed). \textbf{(c)}~Capital recalled via CCTP; venue repaid; collateral released.}
+  \caption{Prime Trade lifecycle. \textbf{(a)}~Borrower pledges ETH; CDP supplies to the external venue; USDC bridged to destination. \textbf{(b)}~Margin agent deposits into HyperCore; borrower trades (dashed). \textbf{(c)}~Capital recalled via bridge; venue repaid; collateral released.}
   \label{fig:primetrade}
 \end{figure}

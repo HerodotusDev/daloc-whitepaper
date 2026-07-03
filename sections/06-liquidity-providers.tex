@@ -1,7 +1,7 @@
 \section{The Harvest Vault}
 \label{sec:lp}
 
-The Harvest Vault's operator originates loans, responds to lifecycle events, and manages portfolio concentration. All actions are bounded by a publicly auditable mandate and enforced per-epoch by a zero-knowledge proof. The vault is the canonical lending book: when it has sufficient idle capital, it funds loans directly at the full fixed rate (Section~\ref{sec:capital}); when demand exceeds capacity, it routes through external venues and commits only hedging reserves. The mandate, not operator reputation, is the trust anchor for deployed capital.
+The Harvest Vault's operator originates loans, responds to lifecycle events, and manages portfolio concentration. All actions are bounded by a publicly auditable mandate; compliance is attested per-epoch by a zero-knowledge proof and enforced through fee-gating. The vault is the canonical lending book: when it has sufficient idle capital, it funds loans directly at the full fixed rate (Section~\ref{sec:capital}); when demand exceeds capacity, it routes through external venues and commits only hedging reserves. The mandate, not operator reputation, is the trust anchor for deployed capital.
 
 \subsection{Operator and Mandate}
 
@@ -9,7 +9,7 @@ The operator deploys vault capital by submitting solver quotes to the order book
 \begin{itemize}
   \item \textbf{Allowed collateral set:} asset addresses the operator may accept as loan collateral.
   \item \textbf{Per-collateral LTV ceiling:} maximum loan-to-value ratio the operator may offer on each collateral type.
-  \item \textbf{Per-tenor rate floor:} minimum annualized rate the operator must charge, ensuring the vault never underwrites below a specified spread.
+  \item \textbf{Per-tenor rate floor:} minimum annualized rate the operator must charge; violation forfeits the epoch fee rather than reverting the loan.
   \item \textbf{Portfolio concentration caps:} maximum exposure per borrower, per collateral type, and per market as a fraction of vault NAV.
   \item \textbf{Liquidation reserve requirement:} minimum idle capital maintained at all times for liquidation response and withdrawal settlement.
 \end{itemize}
@@ -25,7 +25,7 @@ The proof outputs a compliance fact registered in the facts registry and consume
 \subsection{Fee-Gating}
 \label{subsec:feegating}
 
-Operators earn a spread fee escrowed during each epoch. A valid compliance fact for the corresponding vault and epoch releases the escrow; otherwise it flows back into vault NAV as LP uplift. LP-facing yield is not contingent on the compliance proof: LPs always receive their share of interest and buffer surplus. An invalid or missing compliance proof does not reverse settled borrower loans; it affects only the operator's right to collect the epoch fee.
+Operators earn a spread fee escrowed during each epoch. A valid compliance fact for the corresponding vault and epoch releases the escrow; otherwise it flows back into vault NAV as LP uplift. LP-facing yield is not contingent on the compliance proof: LPs always receive their share of interest and buffer surplus.
 
 \subsection{NAV and Shares}
 
@@ -34,7 +34,7 @@ LPs deposit USDC and receive ERC-20 shares. The vault's net asset value is
   \mathrm{NAV} = U_{\mathrm{idle}} + \sum_{j} v_j \cdot n_j + B_{\mathrm{escrow}} + I_{\mathrm{accrued}} - W_{\mathrm{pending}},
   \label{eq:nav}
 \end{equation}
-where $U_{\mathrm{idle}}$ is undeployed USDC, $v_j \cdot n_j$ is the claim value (Equation~\ref{eq:debtprice}) times quantity for each held debt token~$j$, $B_{\mathrm{escrow}}$ is escrowed hedging buffers, $I_{\mathrm{accrued}}$ is accrued but uncollected interest, and $W_{\mathrm{pending}}$ is USDC ring-fenced for pending withdrawals. Share price is NAV per outstanding supply, with a virtual offset against inflation attacks. On vault-funded loans, the vault earns the full fixed-rate coupon; on liquidity-forwarding loans, the vault earns buffer surplus. Impairments reduce NAV directly via share-price adjustment.
+where $U_{\mathrm{idle}}$ is undeployed USDC, $v_j \cdot n_j$ is the claim value (Equation~\ref{eq:debtprice}) times quantity for each held debt token~$j$, $B_{\mathrm{escrow}}$ is escrowed hedging buffers, $I_{\mathrm{accrued}}$ is interest that has elapsed chronologically but not yet been verified by a ZK proof (and thus not yet reflected in $v_j$), and $W_{\mathrm{pending}}$ is USDC ring-fenced for pending withdrawals. Share price is NAV per outstanding supply, with a virtual offset against inflation attacks. On vault-funded loans, the vault earns the full fixed-rate coupon; on liquidity-forwarding loans, the vault earns buffer surplus. Impairments reduce NAV directly via share-price adjustment.
 
 \subsection{Epoch Withdrawal}
 \label{subsec:withdrawal}
@@ -48,7 +48,7 @@ Instant withdrawal is incompatible with capital in active positions. The vault q
   \item \textbf{Redemption.} The LP burns receipt tokens and receives the ring-fenced USDC, net of a flat redemption fee.
 \end{enumerate}
 
-Until settlement, the LP remains exposed to pool gains and losses. The epoch delay prevents withdrawing at a stale NAV before a loss lands.
+Until settlement, the LP's redemption value tracks vault NAV (gains and losses included). The epoch delay prevents withdrawing at a stale NAV before a loss lands.
 
 Table~\ref{tab:risk} decomposes risk by participant and origination path.
 
