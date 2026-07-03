@@ -127,9 +127,9 @@ Principal limits, rate, liquidation threshold, reserve sizing, and admissibility
 
 \subsection{Scenario Generation}
 
-Risk is estimated under the real-world probability measure because the objective is capital adequacy, not only no-arbitrage valuation. The scenario generator reproduces volatility clustering, jumps, heavy tails, and the tendency of liquidity, funding rates, and operational latency to worsen together during stress~\cite{castro2021,chiu2023,gudgeon2020,heimbach2023,tovanich2023}. Challenger models run in parallel; parameter uncertainty is converted into conservative add-ons.
+Risk is estimated under the real-world probability measure because the objective is capital adequacy, not only no-arbitrage valuation. The scenario generator reproduces volatility clustering, jumps, heavy tails, and the tendency of liquidity, funding rates, and operational latency to worsen together during stress~\cite{castro2021,chiu2023,gudgeon2020,heimbach2023,tovanich2023}. Challenger models (alternative specifications run against the primary model to detect divergence) run in parallel; parameter uncertainty is converted into conservative add-ons.
 
-Each simulated path replays actual loan cash-flow logic (accrual, liquidation detection, epoch delay, and recovery), producing a distribution of economic loss, not merely of collateral prices. Recovery is modeled as endogenous to trade size, venue depth, and liquidator economics~\cite{perez2021,qin2021,sadeghi2026,tian2025}. For liquidity-forwarding loans, reserves are sized so that the protocol's two-epoch liquidation completes before the venue's instant trigger fires.
+Each simulated path replays actual loan cash-flow logic (accrual, liquidation detection, epoch delay, and recovery), producing a distribution of economic loss, not merely of collateral prices. Recovery is modeled as endogenous to trade size, venue depth, and liquidator economics~\cite{perez2021,qin2021,sadeghi2026,tian2025}. For liquidity-forwarding loans, reserves are sized so that under modeled stress scenarios the protocol's two-epoch liquidation completes before the venue's instant trigger fires; tail scenarios beyond the modeled set may still produce a gap (Section~\ref{sec:discussion}).
 
 \subsection{Provable Risk Engine}
 \label{subsec:provable-risk-engine}
@@ -220,17 +220,7 @@ weaker. This prevents a House from competing by accepting unsupported oracles,
 thinly traded collateral, fragile bridge paths, or external venues whose
 liquidity and liquidation mechanics are not modeled.
 
-The design follows three lessons from adjacent risk systems. Central
-counterparty literature shows that backstop capital and default funds should be
-modeled explicitly as loss-bearing capital structures, including wrong-way risk
-and contagion between member defaults and portfolio losses~\cite{arnsdorf2012}.
-Clearing and netting models show that centralized risk absorption can reduce
-some exposures but does not eliminate risk; the outcome depends on the design
-of the loss waterfall, margin model, and asset correlations~\cite{cont2014,duffie2011}.
-DeFi liquidation and curation research shows that liquidation mechanisms,
-curator policies, and vault-level underwriting choices materially affect lender
-outcomes and therefore require transparent policy commitments rather than
-implicit trust in operators~\cite{chitra2025,qin2023,zbandut2025}.
+The design draws on central counterparty literature (backstop capital modeled as loss-bearing structure including wrong-way risk~\cite{arnsdorf2012}), clearing and netting models (centralized risk absorption helps but depends on waterfall and margin design~\cite{cont2014,duffie2011}), and DeFi liquidation research (liquidation mechanisms and curator policies materially affect outcomes and require transparent commitments~\cite{chitra2025,qin2023,zbandut2025}).
 
 Each covered loan carries an assurance commitment sized to the expected
 shortfall of the liquidation gap under tail and stress scenarios; capital
