@@ -3,15 +3,15 @@
 
 Cross-chain operation is the default; same-chain loans are a special case. Two concerns arise at different layers.
 
-\textbf{Authorization} (protocol-level): proving that collateral was pledged on the collateral chain so the principal chain's contracts can act on it. \daloc{} uses ZK storage proofs via the Herodotus Data Processor (HDP)~\cite{hdp}, combining storage proofs with MMR-backed chain history into a single verifiable claim.
+\textbf{Authorization} (protocol-level): proving that collateral was pledged on the collateral chain so the principal chain's contracts can act on it. \daloc{} uses zero-knowledge storage proofs: cryptographic attestations that a particular storage slot held a particular value at a particular block, verified against the chain's state root. A state root relay or light client makes the source chain's finalized state available on the destination chain.
 
-\textbf{Token movement} (solver-level): physically moving the borrowed asset to its destination. Solvers choose the bridge path from the market's admissible set; bridge hooks compose movement into the origination hook chain.
+\textbf{Token movement} (proof-specified): bridge hooks in the creation proof move the borrowed asset to its destination. The operator selects the admissible bridge path when assembling the proof; keepers submit the resulting transaction on-chain for execution.
 
 \subsection{Authorization Flow}
 
-Consider a borrower who pledges WETH on Ethereum and requests USDC on Arbitrum. The collateral-chain issuer records the pledge; a settlement program reads the CDP's storage slot from Ethereum's state root via HDP (a Merkle inclusion proof against the state trie, attested by an MMR over canonical block headers), producing a verifiable claim that the collateral is locked. On Arbitrum, the debt issuer validates this claim through the facts registry and issues the debt token.
+Consider a borrower who pledges WETH on Ethereum and requests USDC on Arbitrum. The collateral-chain issuer records the pledge; a settlement program reads the CDP's storage slot from Ethereum's state root via a storage proof (a Merkle inclusion proof against the state trie, attested by a finalized state root relayed to the destination chain), producing a verifiable claim that the collateral is locked. On Arbitrum, the debt issuer validates this claim through the facts registry and issues the debt token.
 
-Each chain's issuer advances its epoch independently; coordination relies on shared market identifiers and deterministic addressing, not real-time cross-chain messaging. Bridge latency affects capital delivery but not settlement correctness; a delayed bridge stalls execution, never produces an invalid state.
+Coordination relies on shared market identifiers and deterministic addressing, not real-time cross-chain messaging. Bridge latency affects capital delivery but not settlement correctness; a delayed bridge stalls execution, never produces an invalid state. The relay's trust model is load-bearing for every cross-chain position: a compromised relay could feed false finality, enabling fabricated storage proofs. Participants inherit the relay's security model alongside the oracle's.
 
 \subsection{Deterministic Addressing}
 

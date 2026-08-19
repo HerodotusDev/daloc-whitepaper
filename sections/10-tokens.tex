@@ -10,7 +10,7 @@ Each funded loan issues a transferable ERC-20 whose face value is one unit of th
   v = 1 + I_{\mathrm{cum}},
   \label{eq:debtprice}
 \end{equation}
-where $I_{\mathrm{cum}}$ is the cumulative interest accrued per token, rising as interest is verified. Interest accrues linearly (simple interest, not compound), so the borrower's total obligation at maturity for principal~$P$ over term~$T$ is
+where $I_{\mathrm{cum}}$ is the cumulative interest accrued per token, rising as interest is verified. Under fixed-rate terms, interest accrues linearly (simple interest, not compound), so the borrower's total obligation at maturity for principal~$P$ over term~$T$ is
 \begin{equation}
   D = P\!\left(1 + r\,\frac{T}{T_{\mathrm{year}}}\right),
   \label{eq:totaldebt}
@@ -20,7 +20,11 @@ and the per-period increment used by the on-chain accrual program is
   \Delta I = P\, r\, \frac{\Delta t}{T_{\mathrm{year}}},
   \label{eq:interest}
 \end{equation}
-where $P$ is the outstanding principal in token units, $r$ the annualized rate, $\Delta t$ the accrual period in seconds, and $T_{\mathrm{year}} = 365.25 \times 86{,}400$. Linear accrual is a deliberate choice: the borrower's obligation is fully determined at origination, with no path-dependent compounding. Each accrual requires a valid interest fact verified through the facts registry (Section~\ref{sec:settlement}).
+where $P$ is the outstanding principal in token units, $r$ the annualized rate, $\Delta t$ the accrual period in seconds, and $T_{\mathrm{year}} = 365.25 \times 86{,}400$. Linear accrual is a deliberate choice: the borrower's obligation is fully determined at origination, with no path-dependent compounding.
+
+Variable-rate positions reference an external on-chain rate index; the accrual circuit reads the index value via storage proof, making the rate determination verifiable. The per-period increment follows the same formula with $r$ replaced by the proven index rate for that interval; the index oracle is a market parameter and constitutes a second oracle dependency beyond the collateral price oracle.
+
+Each accrual requires a valid interest fact verified through the facts registry (Section~\ref{sec:settlement}). On-chain guards add defense in depth: accrual windows advance monotonically, no accrual extends past the close timestamp, and cumulative amounts cannot exceed what the committed rate permits. These bounds hold independently of the proof system~\cite{daloc-decent2026}.
 
 Repayment proceeds enter a principal reserve. A subsequent accrual step, backed by a proof tied to the market's rate program, splits the interest portion into a protocol fee and an interest reserve. Holders redeem by burning tokens and receiving principal plus their share of the interest index.
 
@@ -31,4 +35,4 @@ A strict accounting identity holds at all times, ensuring no principal, interest
 \end{equation}
 where $R_{\mathrm{principal}}$ is the redeemable principal reserve, $R_{\mathrm{interest}}$ the interest reserve, $F_{\mathrm{protocol}}$ the accrued protocol fees, and $B_{\mathrm{token}}$ the contract's token balance. Redemptions are blocked until interest for the latest period is accrued, preventing exits at a stale index. A loan can be marked closed only when accrual is current and the principal reserve covers all outstanding tokens.
 
-Debt tokens from criteria-restricted markets carry transfer-time criteria (e.g.\ ``KYC tier~$\geq$~2'') enforced at the hub-routed transfer step, ensuring restrictions persist after origination. When the Harvest Vault is creditor, vault shares (Section~\ref{sec:lp}) reflect the aggregate claim value across all held debt tokens. Debt tokens are ERC-20 with transfer routing through the hub; this hub routing enables criteria enforcement while preserving standard ERC-20 composability for unrestricted tokens.
+Debt tokens from criteria-restricted markets carry transfer-time criteria (e.g.\ ``KYC tier~$\geq$~2'') enforced at the hub-routed transfer step, ensuring restrictions persist after origination. When an underwriter is creditor, underwriter shares (Section~\ref{sec:lp}) reflect the aggregate claim value across all held debt tokens. Debt tokens are ERC-20 with transfer routing through the hub; this hub routing enables criteria enforcement while preserving standard ERC-20 composability for unrestricted tokens.

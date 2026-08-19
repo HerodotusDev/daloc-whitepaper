@@ -1,11 +1,11 @@
 \section{Products}
 \label{sec:products}
 
-All three products share a single protocol layer (the Harvest Vault, per-market order book, settlement pipeline, and risk engine), extensible to new products without modifying core contracts.
+All three products share a single protocol layer (the underwriter, per-market order book, settlement pipeline, and risk engine), extensible to new products without modifying core contracts.
 
 \subsection{Borrow}
 
-A holder of any supported token borrows against it at a fixed rate for a fixed term. Collateral stays on its home chain; yield-bearing collateral (e.g.\ wstETH) continues accruing native yield throughout the loan. Loan-to-value ratio, rate, and term are determined per loan through solver competition (Section~\ref{sec:architecture}). Origination, interest accrual, and liquidation are each governed by zero-knowledge programs, ensuring that no single trusted party controls the loan's lifecycle.
+A holder of any supported token borrows against it with configurable rate models (fixed-rate or variable-rate referencing an external index) for a defined term. Collateral stays on its home chain; yield-bearing collateral (e.g.\ wstETH) continues accruing native yield throughout the loan. Loan-to-value ratio, rate, and term are determined per loan through operator competition (Section~\ref{sec:architecture}). Origination, interest accrual, and liquidation are each governed by zero-knowledge programs, ensuring that no single trusted party controls the loan's lifecycle.
 
 \subsection{Prime Trade}
 
@@ -15,4 +15,4 @@ The margin agent restricts capital to approved operations (trading only, no with
 
 \subsection{Earn}
 
-Liquidity providers deposit USDC into the Harvest Vault, where an operator deploys capital into fixed-rate loans originated through the protocol's order book, either funding loan principal directly or providing hedging buffers when loans are sourced through external venues (Section~\ref{sec:capital}). The operator's strategy is bounded by a publicly auditable mandate; compliance is attested per-epoch by zero-knowledge proof and enforced through fee-gating (Section~\ref{sec:lp}); the operator's fee is released only upon valid compliance proof. On vault-funded loans, yield derives from the full fixed-rate coupon; on liquidity-forwarding loans, from the hedging-buffer surplus. Withdrawal is epoch-based with a settlement delay.
+Liquidity providers grant an allowance to an underwriter and receive ERC-20 shares representing their proportional claim on deployed capital and returns. Proof-gated settlement deploys underwriter capital into loans originated through the protocol's order book, either funding loan principal directly or providing hedging buffers when loans are sourced through external venues (Section~\ref{sec:capital}). The underwriter's strategy is bounded by a committed policy hash; compliance is enforced at proof time (Section~\ref{sec:lp}). Underwriter policy selects the rate model: under fixed-rate terms the coupon is locked at origination; under variable-rate terms an external index is passed through to borrowers. On direct-funded loans, yield derives from the full coupon; on liquidity-forwarding loans, from the hedging-buffer surplus. LP funds leave their wallets only at the instant of proof-gated deployment into a specific position.
